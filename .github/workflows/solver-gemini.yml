@@ -7,9 +7,171 @@ on:
         description: "Issue number to solve"
         required: true
 
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: solver-gemini-${{ github.event.inputs.issue_number }}
+  cancel-in-progress: true
+
 jobs:
-  placeholder:
+  solve:
     runs-on: ubuntu-latest
     steps:
-      - name: Skeleton
-        run: echo "Skeleton workflow. Run from feature branch for full logic."
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup development environment
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -e ".[dev]"
+          pip install -U google-genai
+          pre-commit install
+          echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+      - name: Install Gemini CLI
+        run: npm i -g @google/gemini-cli
+
+      - name: Write GCP service account key
+        shell: bash
+        run: |
+          mkdir -p .secrets
+          echo '${{ secrets.GCP_SA_KEY_JSON }}' > .secrets/sa.json
+          chmod 600 .secrets/sa.json
+
+      - name: Checkout or create solver branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BR="gemini-issue-${{ github.event.inputs.issue_number }}"
+          DEFAULT="${{ github.event.repository.default_branch }}"
+
+          git fetch origin "$DEFAULT" --prune
+
+          if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
+            git fetch origin "$BR"
+            git checkout -B "$BR" "origin/$BR"
+          else
+            git checkout -B "$BR" "origin/$DEFAULT"
+          fi
+
+      - name: Fetch issue context
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ISSUE="${{ github.event.inputs.issue_number }}"
+          mkdir -p .solver
+          gh api "repos/${{ github.repository }}/issues/$ISSUE" > .solver/issue.json
+          gh api "repos/${{ github.repository }}/issues/$ISSUE/comments" > .solver/issue_comments.json
+
+      - name: Generate file tree for context
+        shell: bash
+        run: |
+          find . -type f \
+            -not -path "./.git/*" \
+            -not -path "./.venv/*" \
+            -not -path "./.solver/*" \
+            -not -path "./.secrets/*" \
+            -not -path "./htmlcov/*" \
+            -not -path "./__pycache__/*" \
+            -not -name "*.pyc" \
+            | head -200 > .solver/file_tree.txt
+
+      - name: Run Gemini solver
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/.secrets/sa.json
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_LOCATION: ${{ secrets.GCP_LOCATION }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          python .github/workflows/solver_gemini.py \
+            --issue-json .solver/issue.json \
+            --issue-comments-json .solver/issue_comments.json \
+            --file-tree .solver/file_tree.txt \
+            --out .solver/patch.diff
+
+      - name: Apply patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -s .solver/patch.diff ]]; then
+            echo "Empty patch.diff - Gemini could not generate a patch"
+            exit 1
+          fi
+          echo "=== Generated patch ==="
+          cat .solver/patch.diff
+          echo "======================="
+          git apply --whitespace=nowarn .solver/patch.diff
+          git status --porcelain
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          pytest --tb=short -q || {
+            echo "Tests failed after applying Gemini patch"
+            exit 1
+          }
+
+      - name: Commit & push
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .solver .secrets
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "gemini-solver-bot"
+          git config user.email "gemini-solver-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "gemini-solver: update for issue #${{ github.event.inputs.issue_number }}"
+          git push -u origin "gemini-issue-${{ github.event.inputs.issue_number }}"
+
+      - name: Create or update PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ISSUE="${{ github.event.inputs.issue_number }}"
+          BR="gemini-issue-$ISSUE"
+          DEFAULT="${{ github.event.repository.default_branch }}"
+
+          PR_NUM="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' || true)"
+          if [[ -z "$PR_NUM" || "$PR_NUM" == "null" ]]; then
+            gh pr create \
+              --head "$BR" \
+              --base "$DEFAULT" \
+              --title "gemini-solver: issue #$ISSUE" \
+              --body "Automated fix for #$ISSUE by Gemini solver."
+          else
+            gh pr comment "$PR_NUM" --body "Updated by Gemini solver (pushed new commits)."
+          fi
+
+      - name: On failure, comment on issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ISSUE="${{ github.event.inputs.issue_number }}"
+          gh issue comment "$ISSUE" --body "Gemini solver failed. Check Actions logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

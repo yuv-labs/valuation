@@ -7,9 +7,161 @@ on:
         description: "Issue number to solve"
         required: true
 
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: solver-codex-${{ github.event.inputs.issue_number }}
+  cancel-in-progress: true
+
 jobs:
-  placeholder:
+  solve:
     runs-on: ubuntu-latest
     steps:
-      - name: Skeleton
-        run: echo "Skeleton workflow. Run from feature branch for full logic."
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup development environment
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -e ".[dev]"
+          pre-commit install
+          echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+      - name: Install Codex CLI
+        run: npm i -g @openai/codex
+
+      - name: Configure Codex auth
+        shell: bash
+        run: |
+          export CODEX_HOME="${{ github.workspace }}/.codex"
+          mkdir -p "$CODEX_HOME"
+          echo '${{ secrets.CODEX_AUTH_JSON }}' > "$CODEX_HOME/auth.json"
+          chmod 600 "$CODEX_HOME/auth.json"
+          echo "CODEX_HOME=$CODEX_HOME" >> $GITHUB_ENV
+
+      - name: Checkout or create solver branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BR="codex-issue-${{ github.event.inputs.issue_number }}"
+          DEFAULT="${{ github.event.repository.default_branch }}"
+
+          git fetch origin "$DEFAULT" --prune
+
+          if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
+            git fetch origin "$BR"
+            git checkout -B "$BR" "origin/$BR"
+          else
+            git checkout -B "$BR" "origin/$DEFAULT"
+          fi
+
+      - name: Fetch issue context
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ISSUE="${{ github.event.inputs.issue_number }}"
+          mkdir -p .solver
+          gh api "repos/${{ github.repository }}/issues/$ISSUE" > .solver/issue.json
+          gh api "repos/${{ github.repository }}/issues/$ISSUE/comments" > .solver/issue_comments.json
+
+      - name: Run Codex agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          ISSUE="${{ github.event.inputs.issue_number }}"
+
+          TITLE=$(jq -r '.title' .solver/issue.json)
+          BODY=$(jq -r '.body // ""' .solver/issue.json)
+
+          PROMPT="You are solving GitHub issue #$ISSUE.
+
+          ISSUE TITLE: $TITLE
+
+          ISSUE BODY:
+          $BODY
+
+          INSTRUCTIONS:
+          1. Analyze the codebase to understand the project structure.
+          2. Implement the fix or feature requested in the issue.
+          3. Write or update unit tests as needed.
+          4. Run 'pytest' to verify tests pass.
+          5. If tests fail, fix the code and re-run tests.
+          6. Do NOT commit - just make the code changes.
+
+          PROJECT INFO:
+          - Python project with pytest for testing
+          - Run tests with: pytest
+          - Virtual environment is already activated"
+
+          codex exec "$PROMPT"
+
+      - name: Run final verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          pytest --tb=short -q || {
+            echo "Tests failed after Codex changes"
+            exit 1
+          }
+
+      - name: Commit & push
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .solver .codex
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "codex-solver-bot"
+          git config user.email "codex-solver-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "codex-solver: update for issue #${{ github.event.inputs.issue_number }}"
+          git push -u origin "codex-issue-${{ github.event.inputs.issue_number }}"
+
+      - name: Create or update PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ISSUE="${{ github.event.inputs.issue_number }}"
+          BR="codex-issue-$ISSUE"
+          DEFAULT="${{ github.event.repository.default_branch }}"
+
+          PR_NUM="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' || true)"
+          if [[ -z "$PR_NUM" || "$PR_NUM" == "null" ]]; then
+            gh pr create \
+              --head "$BR" \
+              --base "$DEFAULT" \
+              --title "codex-solver: issue #$ISSUE" \
+              --body "Automated fix for #$ISSUE by Codex agent."
+          else
+            gh pr comment "$PR_NUM" --body "Updated by Codex solver (pushed new commits)."
+          fi
+
+      - name: On failure, comment on issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ISSUE="${{ github.event.inputs.issue_number }}"
+          gh issue comment "$ISSUE" --body "Codex solver failed. Check Actions logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
