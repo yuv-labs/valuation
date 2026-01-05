@@ -1,0 +1,15 @@
+name: solver
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to solve"
+        required: true
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder
+        run: echo "Skeleton workflow. Run from feature branch for full logic."
