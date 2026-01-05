@@ -283,6 +283,14 @@ config = ScenarioConfig(
 
 ## Development
 
+### Pre-commit
+
+Install pre-commit after installing dependencies.
+
+```bash
+pre-commit install
+```
+
 ### Adding New Policies
 
 1. Create policy in `valuation/policies/`
@@ -290,13 +298,3 @@ config = ScenarioConfig(
 3. Use in `ScenarioConfig`
 
 See [valuation/README.md](valuation/README.md) for details.
-
-### Pre-commit Hooks
-
-```bash
-# Formatting and linting
-yapf, pylint, mypy
-
-# Run manually
-pre-commit run --all-files
-```
