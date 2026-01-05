@@ -25,22 +25,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-
-      - name: Setup development environment
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -e ".[dev]"
-          pre-commit install
-          echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
       - name: Install Codex CLI
         run: npm i -g @openai/codex
@@ -77,7 +64,8 @@ jobs:
           ISSUE="${{ github.event.inputs.issue_number }}"
           mkdir -p .solver
           gh api "repos/${{ github.repository }}/issues/$ISSUE" > .solver/issue.json
-          gh api "repos/${{ github.repository }}/issues/$ISSUE/comments" > .solver/issue_comments.json
+          gh api "repos/${{ github.repository }}/issues/$ISSUE/comments" \
+            > .solver/issue_comments.json
 
       - name: Run Codex agent
         shell: bash
@@ -88,51 +76,56 @@ jobs:
           TITLE=$(jq -r '.title' .solver/issue.json)
           BODY=$(jq -r '.body // ""' .solver/issue.json)
 
-          PROMPT="You are solving GitHub issue #$ISSUE.
+          read -r -d '' PROMPT << 'EOFPROMPT' || true
+          You are solving a GitHub issue in a Python project.
 
-          ISSUE TITLE: $TITLE
+          IMPORTANT: First set up the development environment:
+          1. Run: python3 -m venv .venv
+          2. Run: source .venv/bin/activate && pip install -e ".[dev]"
 
-          ISSUE BODY:
-          $BODY
+          Then solve the issue:
+          1. Explore the codebase to understand the project structure
+          2. Implement the fix or feature requested
+          3. Write or update unit tests as needed
+          4. Run tests: source .venv/bin/activate && pytest
+          5. If tests fail, fix and re-run
+          6. Do NOT commit - just make the code changes
 
-          INSTRUCTIONS:
-          1. Analyze the codebase to understand the project structure.
-          2. Implement the fix or feature requested in the issue.
-          3. Write or update unit tests as needed.
-          4. Run 'pytest' to verify tests pass.
-          5. If tests fail, fix the code and re-run tests.
-          6. Do NOT commit - just make the code changes.
+          EOFPROMPT
 
-          PROJECT INFO:
-          - Python project with pytest for testing
-          - Run tests with: pytest
-          - Virtual environment is already activated"
+          FULL_PROMPT="$PROMPT
 
-          codex exec "$PROMPT"
+          ISSUE #$ISSUE
+          TITLE: $TITLE
 
-      - name: Run final verification
-        shell: bash
-        run: |
-          set -euo pipefail
-          source .venv/bin/activate
-          pytest --tb=short -q || {
-            echo "Tests failed after Codex changes"
-            exit 1
-          }
+          BODY:
+          $BODY"
+
+          codex exec "$FULL_PROMPT"
 
       - name: Commit & push
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf .solver .codex
+          rm -rf .solver .codex .venv .secrets
+
           if [[ -z "$(git status --porcelain)" ]]; then
             echo "No changes to commit."
             exit 0
           fi
+
           git config user.name "codex-solver-bot"
           git config user.email "codex-solver-bot@users.noreply.github.com"
-          git add -A
-          git commit -m "codex-solver: update for issue #${{ github.event.inputs.issue_number }}"
+
+          git add --all
+          git reset HEAD -- .venv/ .solver/ .secrets/ .codex/ 2>/dev/null || true
+
+          if [[ -z "$(git diff --cached --name-only)" ]]; then
+            echo "No staged changes after filtering."
+            exit 0
+          fi
+
+          git commit -m "codex-solver: issue #${{ github.event.inputs.issue_number }}"
           git push -u origin "codex-issue-${{ github.event.inputs.issue_number }}"
 
       - name: Create or update PR
@@ -145,7 +138,8 @@ jobs:
           BR="codex-issue-$ISSUE"
           DEFAULT="${{ github.event.repository.default_branch }}"
 
-          PR_NUM="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' || true)"
+          PR_NUM="$(gh pr list --head "$BR" --state open --json number \
+            -q '.[0].number' || true)"
           if [[ -z "$PR_NUM" || "$PR_NUM" == "null" ]]; then
             gh pr create \
               --head "$BR" \
@@ -153,7 +147,8 @@ jobs:
               --title "codex-solver: issue #$ISSUE" \
               --body "Automated fix for #$ISSUE by Codex agent."
           else
-            gh pr comment "$PR_NUM" --body "Updated by Codex solver (pushed new commits)."
+            gh pr comment "$PR_NUM" \
+              --body "Updated by Codex solver (pushed new commits)."
           fi
 
       - name: On failure, comment on issue
@@ -163,4 +158,6 @@ jobs:
         shell: bash
         run: |
           ISSUE="${{ github.event.inputs.issue_number }}"
-          gh issue comment "$ISSUE" --body "Codex solver failed. Check Actions logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          LOGS="${{ github.server_url }}/${{ github.repository }}"
+          LOGS="$LOGS/actions/runs/${{ github.run_id }}"
+          gh issue comment "$ISSUE" --body "Codex solver failed. Logs: $LOGS"
