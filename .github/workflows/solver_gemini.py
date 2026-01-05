@@ -112,9 +112,10 @@ You have access to these tools:
 - done(summary): Call when task is complete
 
 Workflow:
-1. FIRST, set up the project development environment:
-   run_shell("python3 -m venv .venv")
-   run_shell("source .venv/bin/activate && pip install -e '.[dev]'")
+1. FIRST, understand the project and set up the development environment:
+   - Read README.md to understand the project setup instructions
+   - Check pyproject.toml or requirements.txt for dependencies
+   - Follow the project documented setup process (create venv, install deps)
 
 2. Explore the codebase to understand the project structure
    Use list_dir(".") and read_file() to explore
@@ -123,19 +124,18 @@ Workflow:
 
 4. Make necessary changes using write_file
 
-5. Run tests with the project venv:
-   run_shell("source .venv/bin/activate && pytest")
+5. Run tests following the project test setup (usually pytest)
 
 6. If tests fail, read the error and fix the code
 
 7. Call done() when everything works
 
 Rules:
-- ALWAYS set up venv first before running pytest
+- ALWAYS set up the dev environment first before running tests
 - Always read files before modifying them
-- Run pytest after making changes
+- Run tests after making changes
 - Keep changes minimal and focused
-- Follow existing code style (2-space indent, single quotes)
+- Follow existing code style in the project
 - Do NOT commit - just make the code changes
 '''
 

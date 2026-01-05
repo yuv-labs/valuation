@@ -86,7 +86,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf .solver .secrets .venv
+          rm -rf .solver .secrets
 
           if [[ -z "$(git status --porcelain)" ]]; then
             echo "No changes to commit."
@@ -97,7 +97,7 @@ jobs:
           git config user.email "gemini-solver-bot@users.noreply.github.com"
 
           git add --all
-          git reset HEAD -- .venv/ .solver/ .secrets/ .codex/ 2>/dev/null || true
+          git reset HEAD -- .solver/ .secrets/ .codex/ 2>/dev/null || true
 
           if [[ -z "$(git diff --cached --name-only)" ]]; then
             echo "No staged changes after filtering."

@@ -8,11 +8,12 @@ Automated coding bot that reads GitHub Issues and generates code fixes → PR.
 
 | | Agent Environment | Project Environment |
 |---|---|---|
-| Setup by | Workflow | **Agent (run_shell)** |
-| Location | System Python/Node | `.venv` |
-| Dependencies | `google-genai` or `codex` | `pip install -e ".[dev]"` |
+| Setup by | Workflow | **Agent (reads README.md)** |
+| Location | System Python/Node | Project-defined (e.g., `venv`) |
+| Dependencies | `google-genai` or `codex` | Project-defined |
 
-This allows the solver to work with any project regardless of Python version.
+Agent reads project files (README.md, pyproject.toml) to understand setup.
+This allows the solver to work with any project without hardcoded commands.
 
 ## Workflows
 
@@ -33,10 +34,11 @@ This allows the solver to work with any project regardless of Python version.
 
 ```text
 1. Workflow: Setup agent env (google-genai or codex only)
-2. Agent: Setup project env (python -m venv .venv && pip install)
-3. Agent: Explore codebase, make changes, run pytest
-4. Workflow: Commit only intended files (exclude .venv, .solver, etc.)
-5. Workflow: Create/update PR
+2. Agent: Read README.md to understand project setup
+3. Agent: Setup project env following project instructions
+4. Agent: Explore codebase, make changes, run tests
+5. Workflow: Commit only intended files (exclude .solver, .secrets, etc.)
+6. Workflow: Create/update PR
 ```
 
 ## Inputs
@@ -69,10 +71,11 @@ This allows the solver to work with any project regardless of Python version.
 
 Workflow automatically excludes from commits:
 
-- `.venv/` - Project virtual environment
 - `.solver/` - Temporary issue context
 - `.secrets/` - GCP credentials
 - `.codex/` - Codex auth
+
+Project venv (e.g., `venv/`) should be in project's `.gitignore`.
 
 ## Limits
 
@@ -85,8 +88,3 @@ Workflow automatically excludes from commits:
 - [ ] Add Issue/PR event triggers
 - [ ] Allowlist-based actor filtering
 - [ ] Auto-close PR when Issue is closed
-- [ ] Extract project-dependent config from system prompt:
-  - Install command (`pip install -e ".[dev]"`)
-  - Test command (`pytest`)
-  - Code style (`2-space indent, single quotes`)
-  - → Make configurable via workflow inputs or `.solver.yml` config file

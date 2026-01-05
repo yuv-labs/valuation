@@ -77,17 +77,18 @@ jobs:
           BODY=$(jq -r '.body // ""' .solver/issue.json)
 
           read -r -d '' PROMPT << 'EOFPROMPT' || true
-          You are solving a GitHub issue in a Python project.
+          You are solving a GitHub issue.
 
-          IMPORTANT: First set up the development environment:
-          1. Run: python3 -m venv .venv
-          2. Run: source .venv/bin/activate && pip install -e ".[dev]"
+          IMPORTANT: First understand and set up the development environment:
+          1. Read README.md to understand the project setup instructions
+          2. Check pyproject.toml or requirements.txt for dependencies
+          3. Follow the project documented setup process (create venv, install deps)
 
           Then solve the issue:
           1. Explore the codebase to understand the project structure
           2. Implement the fix or feature requested
           3. Write or update unit tests as needed
-          4. Run tests: source .venv/bin/activate && pytest
+          4. Run tests following the project test setup
           5. If tests fail, fix and re-run
           6. Do NOT commit - just make the code changes
 
@@ -107,7 +108,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf .solver .codex .venv .secrets
+          rm -rf .solver .codex .secrets
 
           if [[ -z "$(git status --porcelain)" ]]; then
             echo "No changes to commit."
@@ -118,7 +119,7 @@ jobs:
           git config user.email "codex-solver-bot@users.noreply.github.com"
 
           git add --all
-          git reset HEAD -- .venv/ .solver/ .secrets/ .codex/ 2>/dev/null || true
+          git reset HEAD -- .solver/ .secrets/ .codex/ 2>/dev/null || true
 
           if [[ -z "$(git diff --cached --name-only)" ]]; then
             echo "No staged changes after filtering."
