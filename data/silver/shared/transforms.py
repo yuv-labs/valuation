@@ -13,7 +13,7 @@ def _day_of_year(month: int, day: int) -> int:
   """Get day of year (1-366) for given month/day using a reference year."""
   # Clamp day to valid range for the month
   try:
-    return date(_REFERENCE_YEAR, month, min(day, 28)).timetuple().tm_yday
+    return date(_REFERENCE_YEAR, month, day).timetuple().tm_yday
   except ValueError:
     # Invalid date, use month end
     return date(_REFERENCE_YEAR, month, 28).timetuple().tm_yday
