@@ -1,4 +1,4 @@
-name: solver
+name: solver-codex
 
 on:
   workflow_dispatch:
@@ -11,5 +11,5 @@ jobs:
   placeholder:
     runs-on: ubuntu-latest
     steps:
-      - name: Placeholder
+      - name: Skeleton
         run: echo "Skeleton workflow. Run from feature branch for full logic."
