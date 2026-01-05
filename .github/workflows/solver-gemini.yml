@@ -57,15 +57,13 @@ jobs:
         run: |
           set -euo pipefail
           BR="gemini-issue-${{ github.event.inputs.issue_number }}"
-          DEFAULT="${{ github.event.repository.default_branch }}"
-
-          git fetch origin "$DEFAULT" --prune
+          BASE="${{ github.ref_name }}"
 
           if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
             git fetch origin "$BR"
             git checkout -B "$BR" "origin/$BR"
           else
-            git checkout -B "$BR" "origin/$DEFAULT"
+            git checkout -B "$BR" "$BASE"
           fi
 
       - name: Fetch issue context
