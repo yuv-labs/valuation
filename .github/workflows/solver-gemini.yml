@@ -83,13 +83,18 @@ jobs:
             --max-iterations ${{ github.event.inputs.max_iterations }}
 
       - name: Commit & push
+        id: commit
         shell: bash
         run: |
           set -euo pipefail
           rm -rf .solver .secrets
 
+          echo "=== Git status ==="
+          git status --porcelain
+
           if [[ -z "$(git status --porcelain)" ]]; then
             echo "No changes to commit."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -99,15 +104,21 @@ jobs:
           git add --all
           git reset HEAD -- .solver/ .secrets/ .codex/ 2>/dev/null || true
 
+          echo "=== Staged files ==="
+          git diff --cached --name-only
+
           if [[ -z "$(git diff --cached --name-only)" ]]; then
             echo "No staged changes after filtering."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           git commit -m "gemini-solver: issue #${{ github.event.inputs.issue_number }}"
           git push -u origin "gemini-issue-${{ github.event.inputs.issue_number }}"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
 
       - name: Create or update PR
+        if: steps.commit.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
