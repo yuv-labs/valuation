@@ -7,21 +7,37 @@ Automated coding bot that reads GitHub Issues and generates code fixes → PR.
 <!-- markdownlint-disable MD013 -->
 | Workflow | Agent | Branch | Features |
 |----------|-------|--------|----------|
-| `solver-codex.yml` | OpenAI Codex CLI | `codex-issue-N` | Full agent (file R/W, terminal, retry loop) |
-| `solver-gemini.yml` | Gemini (Vertex AI) | `gemini-issue-N` | Single-shot patch generator |
+| `solver-codex.yml` | OpenAI Codex CLI | `codex-issue-N` | Full agent (file R/W, terminal, retry) |
+| `solver-gemini.yml` | Gemini (Vertex AI) | `gemini-issue-N` | Tool-calling agent with max iterations |
 <!-- markdownlint-enable MD013 -->
 
 ## Usage
 
 1. **Actions** → Select **solver-codex** or **solver-gemini**
-2. **Run workflow** → Enter `issue_number`
-3. Bot creates branch → modifies code → runs tests → creates PR
+2. **Run workflow** → Select branch, enter `issue_number`
+3. Bot creates branch → explores code → makes changes → runs tests → PR
 
 ## Flow
 
 ```text
-Issue fetch → Dev setup (venv + deps) → Agent run → pytest verify → Push → PR
+Issue fetch → Agent explores codebase → Modifies files → Runs pytest → Push → PR
 ```
+
+## Agent Capabilities
+
+Both agents can:
+
+- **Read files** - Explore the codebase
+- **Write files** - Create/modify code
+- **Run shell commands** - Execute pytest, git status, etc.
+- **Iterate** - Retry if tests fail (up to max_iterations)
+
+## Inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `issue_number` | required | GitHub issue number to solve |
+| `max_iterations` | 20 | Max agent loop iterations (Gemini only) |
 
 ## Secrets
 
@@ -38,9 +54,16 @@ Issue fetch → Dev setup (venv + deps) → Agent run → pytest verify → Push
 .github/workflows/
 ├── solver-codex.yml      # Codex workflow
 ├── solver-gemini.yml     # Gemini workflow
-├── solver_gemini.py      # Gemini patch generator
+├── solver_gemini.py      # Gemini tool-calling agent
 └── SOLVER_README.md      # This file
 ```
+
+## Limits
+
+- **Job timeout**: 30 minutes
+- **Max iterations**: 20 (configurable for Gemini)
+- **File read limit**: 50,000 chars
+- **Shell command timeout**: 120 seconds
 
 ## TODO
 
