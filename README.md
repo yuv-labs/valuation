@@ -10,7 +10,7 @@ architecture, and backtesting capabilities.
 ## Requirements
 
 - Python >= 3.9 (tested with 3.12)
-- Dependencies managed via `pyproject.toml`
+- Dependencies managed via `pyproject.toml` or `requirements.in`
 
 ### Installation
 
