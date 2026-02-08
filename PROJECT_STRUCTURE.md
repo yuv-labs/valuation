@@ -48,9 +48,13 @@ valuation/
 │   │   └── registry.py    # Policy registry + pre-defined scenarios
 │   └── analysis/          # Analysis tools
 │       ├── README.md      # Analysis tools documentation
+│       ├── backtest/             # Backtesting modules
 │       ├── batch_valuation.py    # Multi-company valuation
-│       ├── sensitivity.py        # Sensitivity tables (r × g0)
-│       └── compare_capex.py      # CAPEX method comparison charts
+│       ├── backtest_from_configs.py # Config-based backtest
+│       ├── band_screening.py     # Stock screening
+│       ├── generate_grid_configs.py # Grid search generator
+│       ├── plot_prices.py        # Scenario visualization
+│       └── sensitivity.py        # Sensitivity tables (r × g0)
 │
 ├── results/               # Output files (CSV, charts)
 └── tools/                # Utilities
