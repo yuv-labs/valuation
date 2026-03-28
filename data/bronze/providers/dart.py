@@ -27,8 +27,15 @@ _CORP_CODE_URL = 'https://opendart.fss.or.kr/api/corpCode.xml'
 _FINSTATE_URL = (
     'https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json')
 
-# Annual report
+# Report codes: Q1, Q2(半期), Q3, Annual
+_REPRT_CODES_ALL = ['11013', '11012', '11014', '11011']
 _REPRT_CODE_ANNUAL = '11011'
+_REPRT_CODE_TO_QUARTER = {
+    '11013': 'Q1',
+    '11012': 'Q2',
+    '11014': 'Q3',
+    '11011': 'Q4',
+}
 
 # Default: fetch last 5 years for time-series analysis.
 _DEFAULT_HISTORY_YEARS = 5
@@ -54,10 +61,12 @@ class DARTProvider(BronzeProvider):
       api_key: str,
       min_interval_sec: float = 0.2,
       bsns_years: Optional[list[str]] = None,
+      reprt_codes: Optional[list[str]] = None,
   ) -> None:
     self._api_key = api_key
     self._min_interval = min_interval_sec
     self._bsns_years = bsns_years
+    self._reprt_codes = reprt_codes or _REPRT_CODES_ALL
 
   @property
   def name(self) -> str:
@@ -109,36 +118,43 @@ class DARTProvider(BronzeProvider):
         continue
 
       for year in years:
-        out_path = (dart_dir / 'finstate'
-                    / f'{corp_code}_{year}.json')
-        if not force and _is_fresh(out_path, refresh_days):
-          skipped += 1
-          continue
-
-        try:
-          data = self._fetch_finstate(corp_code, year)
-
-          # DART returns 200 + status "013" when no data.
-          if data.get('status') != '000':
-            logger.debug(
-                '%s/%s: %s',
-                stock_code, year, data.get('message'))
+        for reprt_code in self._reprt_codes:
+          qtr = _REPRT_CODE_TO_QUARTER.get(
+              reprt_code, reprt_code)
+          out_path = (
+              dart_dir / 'finstate'
+              / f'{corp_code}_{year}_{qtr}.json')
+          if not force and _is_fresh(out_path, refresh_days):
             skipped += 1
             continue
 
-          content = json.dumps(
-              data, ensure_ascii=False,
-              indent=2).encode('utf-8')
-          _atomic_write_bytes(out_path, content)
-          _write_meta(out_path, {
-              'corp_code': corp_code,
-              'stock_code': stock_code,
-              'bsns_year': year,
-          })
-          fetched += 1
-          time.sleep(self._min_interval)
-        except (requests.RequestException, OSError) as exc:
-          errors.append(f'{stock_code}/{year}: {exc}')
+          try:
+            data = self._fetch_finstate(
+                corp_code, year, reprt_code)
+
+            if data.get('status') != '000':
+              logger.debug(
+                  '%s/%s/%s: %s', stock_code,
+                  year, qtr, data.get('message'))
+              skipped += 1
+              continue
+
+            content = json.dumps(
+                data, ensure_ascii=False,
+                indent=2).encode('utf-8')
+            _atomic_write_bytes(out_path, content)
+            _write_meta(out_path, {
+                'corp_code': corp_code,
+                'stock_code': stock_code,
+                'bsns_year': year,
+                'reprt_code': reprt_code,
+                'quarter': qtr,
+            })
+            fetched += 1
+            time.sleep(self._min_interval)
+          except (requests.RequestException, OSError) as exc:
+            errors.append(
+                f'{stock_code}/{year}/{qtr}: {exc}')
 
     return ProviderResult(
         provider_name=self.name,
@@ -163,13 +179,14 @@ class DARTProvider(BronzeProvider):
       self,
       corp_code: str,
       bsns_year: str,
+      reprt_code: str = _REPRT_CODE_ANNUAL,
   ) -> dict[str, Any]:
-    """Fetch full financial statement for one company/year."""
+    """Fetch financial statement for one company/year/quarter."""
     params = {
         'crtfc_key': self._api_key,
         'corp_code': corp_code,
         'bsns_year': bsns_year,
-        'reprt_code': _REPRT_CODE_ANNUAL,
+        'reprt_code': reprt_code,
         'fs_div': 'CFS',
     }
     resp = requests.get(_FINSTATE_URL, params=params, timeout=30)
