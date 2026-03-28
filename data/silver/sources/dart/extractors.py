@@ -60,6 +60,7 @@ class DARTExtractor:
     items = data['list']
     corp_code = _extract_corp_code(finstate_path)
     bsns_year = _extract_bsns_year(finstate_path)
+    quarter = _extract_quarter(finstate_path)
 
     rows: list[dict[str, Any]] = []
     for item in items:
@@ -80,6 +81,7 @@ class DARTExtractor:
           'val': val,
           'bsns_year': bsns_year or item.get('bsns_year'),
           'reprt_code': item.get('reprt_code'),
+          'quarter': quarter,
       })
 
     df = pd.DataFrame(rows)
@@ -91,16 +93,25 @@ class DARTExtractor:
 
 
 def _extract_corp_code(path: Path) -> str:
-  """Extract corp_code from filename like 00126380_2024.json."""
+  """Extract corp_code from filename like 00126380_2024_Q1.json."""
   name = path.stem
   parts = name.split('_')
   return parts[0] if parts else name
 
 
 def _extract_bsns_year(path: Path) -> Optional[str]:
-  """Extract bsns_year from filename like 00126380_2024.json."""
+  """Extract bsns_year from filename like 00126380_2024_Q1.json."""
   name = path.stem
   parts = name.split('_')
   if len(parts) >= 2:
     return parts[1]
+  return None
+
+
+def _extract_quarter(path: Path) -> Optional[str]:
+  """Extract quarter from filename like 00126380_2024_Q1.json."""
+  name = path.stem
+  parts = name.split('_')
+  if len(parts) >= 3:
+    return parts[2]
   return None

@@ -314,22 +314,38 @@ class ScreeningPanelBuilder(BasePanelBuilder):
         if not df.empty:
           mapped = df[df['metric'].notna()].copy()
           if not mapped.empty:
-            # Map corp_code -> stock_code as cik10,
-            # so it matches KRX price ticker.
             mapped['cik10'] = mapped['corp_code'].map(
                 corp_to_stock).fillna(mapped['corp_code'])
             mapped = mapped.rename(columns={
                 'bsns_year': 'fy',
             })
-            fy_strs = mapped['fy'].astype(str)
-            end_str = fy_strs + '-12-31'  # type: ignore[operator]
-            mapped['end'] = pd.to_datetime(end_str)
-            mapped['filed'] = (
-                mapped['end'] + pd.Timedelta(days=90))
-            mapped['fp'] = 'FY'
             mapped['fiscal_year'] = pd.to_numeric(
                 mapped['fy'], errors='coerce')
-            mapped['fiscal_quarter'] = 'Q4'
+
+            # Quarter-aware end date and fiscal_quarter.
+            qtr = mapped['quarter'].iloc[0] if (
+                'quarter' in mapped.columns
+                and mapped['quarter'].notna().any()
+            ) else 'Q4'
+            mapped['fiscal_quarter'] = qtr
+            mapped['fp'] = qtr
+
+            qtr_month = {
+                'Q1': '03-31', 'Q2': '06-30',
+                'Q3': '09-30', 'Q4': '12-31',
+            }
+            mm_dd = qtr_month.get(qtr, '12-31')
+            fy_strs = mapped['fy'].astype(str)
+            end_str = fy_strs + f'-{mm_dd}'  # type: ignore[operator]
+            mapped['end'] = pd.to_datetime(end_str)
+
+            # Approximate filed date: Q-end + 45 days
+            # (annual + 90 days).
+            filed_lag = 90 if qtr == 'Q4' else 45
+            mapped['filed'] = (
+                mapped['end']
+                + pd.Timedelta(days=filed_lag))
+
             facts_list.append(mapped)
 
     facts = (pd.concat(facts_list, ignore_index=True)

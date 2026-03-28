@@ -84,9 +84,10 @@ class TestDARTProviderFetch:
 
     mock_get.side_effect = side_effect
 
-    # Fetch single year to keep test simple.
+    # Fetch single year, annual only.
     provider = DARTProvider(
-        api_key='test', bsns_years=['2024'])
+        api_key='test', bsns_years=['2024'],
+        reprt_codes=['11011'])
     result = provider.fetch(
         ['005930'], tmp_path, refresh_days=0, force=True)
 
@@ -97,8 +98,9 @@ class TestDARTProviderFetch:
     corp_file = tmp_path / 'dart' / 'CORPCODE.xml'
     assert corp_file.exists()
 
-    # Finstate file should be named with year.
-    fin_file = tmp_path / 'dart' / 'finstate' / '00126380_2024.json'
+    # Finstate file named with year and quarter.
+    fin_file = (tmp_path / 'dart' / 'finstate'
+                / '00126380_2024_Q4.json')
     assert fin_file.exists()
 
   @patch('data.bronze.providers.dart.requests.get')
@@ -113,7 +115,8 @@ class TestDARTProviderFetch:
     mock_get.side_effect = side_effect
 
     provider = DARTProvider(
-        api_key='test', bsns_years=['2024'])
+        api_key='test', bsns_years=['2024'],
+        reprt_codes=['11011'])
     result = provider.fetch(
         ['999999'], tmp_path, refresh_days=0, force=True)
 
