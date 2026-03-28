@@ -15,6 +15,7 @@ dependencies = [
     "pandas-datareader==0.10.0",
     "pyarrow==23.0.0",
     "tabulate>=0.9.0",
+    "pykrx>=1.0.45",
 ]
 
 [project.optional-dependencies]
