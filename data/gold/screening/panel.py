@@ -8,8 +8,10 @@ Unlike valuation/backtest panels (CFO-anchored, 3 metrics),
 this panel uses all available metrics and computes derived ratios.
 """
 
+import json
 import logging
 from pathlib import Path
+import re
 from typing import Optional
 
 import pandas as pd
@@ -20,6 +22,38 @@ from data.gold.transforms import calculate_market_cap
 from data.gold.transforms import join_prices_pit
 
 logger = logging.getLogger(__name__)
+
+
+def _load_kr_shares(
+    shares_dir: Path,
+    corp_to_stock: dict[str, str],
+) -> dict[str, float]:
+  """Load shares outstanding from DART shares JSON files.
+
+  Returns: {stock_code: shares_count}
+  """
+  result: dict[str, float] = {}
+  for path in shares_dir.glob('*.json'):
+    if path.name.endswith('.meta.json'):
+      continue
+    try:
+      data = json.loads(path.read_text(encoding='utf-8'))
+      if data.get('status') != '000' or not data.get('list'):
+        continue
+      corp_code = path.stem
+      stock_code = corp_to_stock.get(corp_code, corp_code)
+      for item in data['list']:
+        # '보통주' row has common shares outstanding
+        se = item.get('se', '')
+        if se.strip() in ('\ubcf4\ud1b5\uc8fc', '보통주'):
+          raw = item.get('istc_totqy', '')
+          cleaned = re.sub(r'[,\s]', '', str(raw))
+          if cleaned and cleaned != '-':
+            result[stock_code] = float(cleaned)
+            break
+    except (json.JSONDecodeError, OSError, ValueError):
+      continue
+  return result
 
 # Metrics we need for screening ratios.
 _TTM_METRICS = [
@@ -328,7 +362,9 @@ class ScreeningPanelBuilder(BasePanelBuilder):
                 and mapped['quarter'].notna().any()
             ) else 'Q4'
             mapped['fiscal_quarter'] = qtr
-            mapped['fp'] = qtr
+            # fp must be 'FY' for Q4/annual so
+            # YTDToQuarterlyConverter handles it.
+            mapped['fp'] = 'FY' if qtr == 'Q4' else qtr
 
             qtr_month = {
                 'Q1': '03-31', 'Q2': '06-30',
@@ -350,6 +386,33 @@ class ScreeningPanelBuilder(BasePanelBuilder):
 
     facts = (pd.concat(facts_list, ignore_index=True)
              if facts_list else pd.DataFrame())
+
+    # -- DART shares outstanding --
+    shares_dir = bronze_dir / 'dart' / 'shares'
+    if shares_dir.exists() and not facts.empty:
+      shares_map = _load_kr_shares(shares_dir, corp_to_stock)
+      if shares_map:
+        shares_rows: list[dict] = []  # type: ignore[type-arg]
+        for stock_code, shares_val in shares_map.items():
+          # Add SHARES as a fact for each end date
+          ends = facts[facts['cik10'] == stock_code][
+              'end'].unique()
+          for end in ends:
+            shares_rows.append({
+                'cik10': stock_code,
+                'metric': 'SHARES',
+                'val': shares_val,
+                'end': end,
+                'filed': end + pd.Timedelta(days=90),
+                'fp': 'FY',
+                'fiscal_year': end.year,
+                'fiscal_quarter': 'Q4',
+                'fy': str(end.year),
+            })
+        if shares_rows:
+          shares_df = pd.DataFrame(shares_rows)
+          facts = pd.concat(
+              [facts, shares_df], ignore_index=True)
 
     # -- KRX prices --
     krx_dir = bronze_dir / 'krx' / 'daily'
