@@ -191,6 +191,7 @@ def calculate_iv_for_date(
     as_of_date: pd.Timestamp,
     scenario: ScenarioConfig,
     loader: ValuationDataLoader,
+    market: str = 'us',
 ) -> Optional[dict[str, Any]]:
   """
   Calculate IV for a single date using a specific scenario.
@@ -272,8 +273,9 @@ def calculate_iv_for_date(
   display_iv = max(0.0, iv)
 
   try:
-    market_slice = get_price_after_filing(ticker, fundamentals.latest_filed,
-                                          loader)
+    market_slice = get_price_after_filing(
+        ticker, fundamentals.latest_filed, loader,
+        market=market)
     market_price = market_slice.price
   except (FileNotFoundError, ValueError):
     market_price = None
@@ -299,6 +301,7 @@ def plot_scenario_comparison(
     output_dir: Path,
     loader: ValuationDataLoader,
     month_interval: int = 3,
+    market: str = 'us',
 ) -> None:
   """Plot IV comparison for different scenarios vs market price."""
   ticker_panel = panel[panel['ticker'] == ticker].copy()
@@ -331,7 +334,7 @@ def plot_scenario_comparison(
       len(scenarios), len(backtest_dates), month_interval)
 
   prices = loader.load_prices()
-  symbol = f'{ticker}.US'
+  symbol = ticker if market == 'kr' else f'{ticker}.US'
   ticker_prices = prices[prices['symbol'] == symbol].sort_values('date')
 
   for as_of_date in backtest_dates:
@@ -342,8 +345,9 @@ def plot_scenario_comparison(
     scenario_ivs: dict[str, Optional[float]] = {}
 
     for scenario in scenarios:
-      result = calculate_iv_for_date(panel, ticker, as_of_date, scenario,
-                                     loader)
+      result = calculate_iv_for_date(
+          panel, ticker, as_of_date, scenario, loader,
+          market=market)
       if result:
         scenario_ivs[scenario.name] = result['iv']
       else:
@@ -508,6 +512,11 @@ Examples:
                       type=Path,
                       default=Path('data/silver/out'),
                       help='Path to Silver directory')
+  parser.add_argument('--market',
+                      type=str,
+                      choices=['us', 'kr'],
+                      default='us',
+                      help='Market (us or kr)')
   parser.add_argument('--month-interval',
                       type=int,
                       default=3,
@@ -589,6 +598,7 @@ Examples:
         output_dir=args.output_dir,
         loader=loader,
         month_interval=args.month_interval,
+        market=args.market,
     )
     return ticker
 

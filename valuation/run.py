@@ -42,6 +42,7 @@ def get_price_after_filing(
     ticker: str,
     filed_date: pd.Timestamp,
     loader: ValuationDataLoader,
+    market: str = 'us',
 ) -> MarketSlice:
   """
   Get market price on first trading day after filing date.
@@ -50,13 +51,14 @@ def get_price_after_filing(
     ticker: Company ticker symbol
     filed_date: SEC filing date
     loader: Data loader for accessing price data
+    market: Market identifier ('us' or 'kr')
 
   Returns:
     MarketSlice with price and date
   """
   prices = loader.load_prices()
 
-  symbol = f'{ticker}.US'
+  symbol = ticker if market == 'kr' else f'{ticker}.US'
   ticker_prices = prices[prices['symbol'] == symbol].copy()
 
   if ticker_prices.empty:
@@ -85,6 +87,7 @@ def run_valuation(
     loader: ValuationDataLoader,
     config: Optional[ScenarioConfig] = None,
     include_market_price: bool = True,
+    market: str = 'us',
 ) -> ValuationResult:
   """
   Run valuation for a single ticker at a specific date.
@@ -185,7 +188,8 @@ def run_valuation(
   market_slice = None
   if include_market_price:
     try:
-      market_slice = get_price_after_filing(ticker, data.latest_filed, loader)
+      market_slice = get_price_after_filing(
+          ticker, data.latest_filed, loader, market=market)
       all_diag['price_date'] = str(market_slice.price_date.date())
     except (FileNotFoundError, ValueError) as e:
       all_diag['price_error'] = str(e)
@@ -238,6 +242,13 @@ def main() -> None:
       default=Path('data/silver/out'),
       help='Path to Silver directory',
   )
+  parser.add_argument(
+      '--market',
+      type=str,
+      choices=['us', 'kr'],
+      default='us',
+      help='Market (us or kr)',
+  )
   args = parser.parse_args()
 
   if args.scenario == 'default':
@@ -255,6 +266,7 @@ def main() -> None:
       as_of_date=args.as_of,
       loader=loader,
       config=config,
+      market=args.market,
   )
 
   separator = '=' * 70

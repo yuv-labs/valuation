@@ -96,6 +96,13 @@ class ValuationDataLoader:
     prices = pd.read_parquet(prices_path)
     prices['date'] = pd.to_datetime(prices['date'])
 
+    # Append KRX prices if available.
+    krx_path = self.silver_dir / 'krx' / 'prices_daily.parquet'
+    if krx_path.exists():
+      krx = pd.read_parquet(krx_path)
+      krx['date'] = pd.to_datetime(krx['date'])
+      prices = pd.concat([prices, krx], ignore_index=True)
+
     self._prices = prices
     return prices
 
