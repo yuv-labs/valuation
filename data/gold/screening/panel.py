@@ -8,6 +8,7 @@ Unlike valuation/backtest panels (CFO-anchored, 3 metrics),
 this panel uses all available metrics and computes derived ratios.
 """
 
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -17,6 +18,8 @@ from data.gold.config.schemas import PanelSchema
 from data.gold.core.base import BasePanelBuilder
 from data.gold.transforms import calculate_market_cap
 from data.gold.transforms import join_prices_pit
+
+logger = logging.getLogger(__name__)
 
 # Metrics we need for screening ratios.
 _TTM_METRICS = [
@@ -47,6 +50,7 @@ class ScreeningPanelBuilder(BasePanelBuilder):
       silver_dir: Path,
       gold_dir: Path,
       min_date: Optional[str] = None,
+      bronze_dir: Optional[Path] = None,
   ):
     schema = PanelSchema(
         name=_SCREENING_SCHEMA_NAME,
@@ -55,13 +59,39 @@ class ScreeningPanelBuilder(BasePanelBuilder):
         primary_key=['ticker', 'end'],
     )
     super().__init__(silver_dir, gold_dir, schema, min_date)
+    self._bronze_dir = bronze_dir
 
   def build(self) -> pd.DataFrame:
-    """Build screening panel."""
+    """Build screening panel (US + optionally KR)."""
     companies, facts, prices = self._load_data()
+
+    # Append Korean data if bronze_dir has DART data.
+    if self._bronze_dir is not None:
+      kr_facts, kr_prices = self._load_kr_data(self._bronze_dir)
+      if not kr_facts.empty:
+        facts = pd.concat([facts, kr_facts], ignore_index=True)
+        # Add KR companies to the ticker map.
+        kr_companies = (
+            kr_facts[['cik10']].drop_duplicates().copy())
+        kr_companies['ticker'] = kr_companies['cik10']
+        companies = pd.concat(
+            [companies, kr_companies], ignore_index=True)
+        logger.info('Added %d Korean facts rows', len(kr_facts))
+      if not kr_prices.empty:
+        prices = pd.concat([prices, kr_prices], ignore_index=True)
 
     # Build quarterly + TTM for all metrics.
     metrics_q = self._build_quarterly_metrics(facts)
+
+    # For Korean annual-only data, TTM is missing because
+    # there are no Q1-Q3 filings. Use q_val as ttm_val.
+    if 'ttm_val' in metrics_q.columns:
+      annual_mask = (
+          metrics_q['ttm_val'].isna()
+          & metrics_q['fiscal_quarter'].eq('Q4')
+          & metrics_q['q_val'].notna())
+      metrics_q.loc[annual_mask, 'ttm_val'] = (
+          metrics_q.loc[annual_mask, 'q_val'])
 
     # Pivot to wide: one row per (cik10, end), latest filed.
     wide = self._pivot_to_wide(metrics_q)
@@ -253,3 +283,83 @@ class ScreeningPanelBuilder(BasePanelBuilder):
       df['gp_margin'] = pd.NA
 
     return df
+
+  @staticmethod
+  def _load_kr_data(
+      bronze_dir: Path,
+  ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load Korean DART facts + KRX prices from Bronze."""
+    from data.bronze.providers.dart import \
+        _parse_corp_codes  # pylint: disable=import-outside-toplevel
+    from data.silver.sources.dart.extractors import \
+        DARTExtractor  # pylint: disable=import-outside-toplevel
+
+    # Build corp_code -> stock_code mapping.
+    corp_xml = bronze_dir / 'dart' / 'CORPCODE.xml'
+    stock_to_corp: dict[str, str] = {}
+    corp_to_stock: dict[str, str] = {}
+    if corp_xml.exists():
+      stock_to_corp = _parse_corp_codes(corp_xml)
+      corp_to_stock = {v: k for k, v in stock_to_corp.items()}
+
+    # -- DART facts --
+    dart_dir = bronze_dir / 'dart' / 'finstate'
+    facts_list: list[pd.DataFrame] = []
+    if dart_dir.exists():
+      extractor = DARTExtractor()
+      for path in sorted(dart_dir.glob('*.json')):
+        if path.name.endswith('.meta.json'):
+          continue
+        df = extractor.extract_facts(path)
+        if not df.empty:
+          mapped = df[df['metric'].notna()].copy()
+          if not mapped.empty:
+            # Map corp_code -> stock_code as cik10,
+            # so it matches KRX price ticker.
+            mapped['cik10'] = mapped['corp_code'].map(
+                corp_to_stock).fillna(mapped['corp_code'])
+            mapped = mapped.rename(columns={
+                'bsns_year': 'fy',
+            })
+            fy_strs = mapped['fy'].astype(str)
+            end_str = fy_strs + '-12-31'  # type: ignore[operator]
+            mapped['end'] = pd.to_datetime(end_str)
+            mapped['filed'] = (
+                mapped['end'] + pd.Timedelta(days=90))
+            mapped['fp'] = 'FY'
+            mapped['fiscal_year'] = pd.to_numeric(
+                mapped['fy'], errors='coerce')
+            mapped['fiscal_quarter'] = 'Q4'
+            facts_list.append(mapped)
+
+    facts = (pd.concat(facts_list, ignore_index=True)
+             if facts_list else pd.DataFrame())
+
+    # -- KRX prices --
+    krx_dir = bronze_dir / 'krx' / 'daily'
+    price_list: list[pd.DataFrame] = []
+    if krx_dir.exists():
+      for csv_path in sorted(krx_dir.glob('*.csv')):
+        try:
+          pdf = pd.read_csv(csv_path, encoding='utf-8')
+          ticker = csv_path.stem
+          date_col = pdf.columns[0]
+          close_col = [c for c in pdf.columns
+                       if 'close' in c.lower()
+                       or '\uc885\uac00' in c]
+          if not close_col:
+            continue
+          out = pd.DataFrame({
+              'date': pd.to_datetime(pdf[date_col]),
+              'symbol': ticker,
+              'close': pd.to_numeric(
+                  pdf[close_col[0]], errors='coerce'),
+          })
+          price_list.append(out)
+        except Exception:  # pylint: disable=broad-except
+          continue
+
+    prices = (pd.concat(price_list, ignore_index=True)
+              if price_list else pd.DataFrame())
+
+    return facts, prices
