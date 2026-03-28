@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from data.gold.panels import BacktestPanelBuilder
-from data.gold.panels import ValuationPanelBuilder
+from data.gold.backtest.panel import BacktestPanelBuilder
+from data.gold.valuation.panel import ValuationPanelBuilder
 
 logger = logging.getLogger(__name__)
 
