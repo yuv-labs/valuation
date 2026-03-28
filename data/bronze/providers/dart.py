@@ -30,6 +30,21 @@ _FINSTATE_URL = (
 # Annual report
 _REPRT_CODE_ANNUAL = '11011'
 
+# Default: fetch last 5 years for time-series analysis.
+_DEFAULT_HISTORY_YEARS = 5
+
+
+def _default_bsns_years() -> list[str]:
+  """Compute business years to fetch.
+
+  If current month is Jan-Mar, the most recent annual report
+  (year-1) may not be filed yet, so start from year-2.
+  """
+  now = datetime.now()
+  latest = now.year - 1 if now.month >= 4 else now.year - 2
+  return [str(y) for y in range(
+      latest - _DEFAULT_HISTORY_YEARS + 1, latest + 1)]
+
 
 class DARTProvider(BronzeProvider):
   """Fetches Korean financial statements from DART Open API."""
@@ -38,9 +53,11 @@ class DARTProvider(BronzeProvider):
       self,
       api_key: str,
       min_interval_sec: float = 0.2,
+      bsns_years: Optional[list[str]] = None,
   ) -> None:
     self._api_key = api_key
     self._min_interval = min_interval_sec
+    self._bsns_years = bsns_years
 
   @property
   def name(self) -> str:
@@ -79,8 +96,10 @@ class DARTProvider(BronzeProvider):
     # 2) Build stock_code -> corp_code map
     stock_to_corp = _parse_corp_codes(corp_xml_path)
 
-    # 3) Fetch finstate for each ticker (stock_code)
+    # 3) Fetch finstate for each ticker × year
+    years = self._bsns_years or _default_bsns_years()
     tickers_list = list(tickers)
+
     for stock_code in tickers_list:
       stock_code = stock_code.strip()
       corp_code = stock_to_corp.get(stock_code)
@@ -89,25 +108,37 @@ class DARTProvider(BronzeProvider):
             f'Stock code not found in DART: {stock_code}')
         continue
 
-      out_path = dart_dir / 'finstate' / f'{corp_code}.json'
-      if not force and _is_fresh(out_path, refresh_days):
-        skipped += 1
-        continue
+      for year in years:
+        out_path = (dart_dir / 'finstate'
+                    / f'{corp_code}_{year}.json')
+        if not force and _is_fresh(out_path, refresh_days):
+          skipped += 1
+          continue
 
-      try:
-        data = self._fetch_finstate(corp_code)
-        content = json.dumps(
-            data, ensure_ascii=False, indent=2).encode('utf-8')
-        _atomic_write_bytes(out_path, content)
-        _write_meta(out_path, {
-            'corp_code': corp_code,
-            'stock_code': stock_code,
-            'fetched_at_utc': '',
-        })
-        fetched += 1
-        time.sleep(self._min_interval)
-      except (requests.RequestException, OSError) as exc:
-        errors.append(f'{stock_code}: {exc}')
+        try:
+          data = self._fetch_finstate(corp_code, year)
+
+          # DART returns 200 + status "013" when no data.
+          if data.get('status') != '000':
+            logger.debug(
+                '%s/%s: %s',
+                stock_code, year, data.get('message'))
+            skipped += 1
+            continue
+
+          content = json.dumps(
+              data, ensure_ascii=False,
+              indent=2).encode('utf-8')
+          _atomic_write_bytes(out_path, content)
+          _write_meta(out_path, {
+              'corp_code': corp_code,
+              'stock_code': stock_code,
+              'bsns_year': year,
+          })
+          fetched += 1
+          time.sleep(self._min_interval)
+        except (requests.RequestException, OSError) as exc:
+          errors.append(f'{stock_code}/{year}: {exc}')
 
     return ProviderResult(
         provider_name=self.name,
@@ -131,12 +162,9 @@ class DARTProvider(BronzeProvider):
   def _fetch_finstate(
       self,
       corp_code: str,
-      bsns_year: Optional[str] = None,
+      bsns_year: str,
   ) -> dict[str, Any]:
-    """Fetch full financial statement for one company."""
-    if bsns_year is None:
-      bsns_year = str(datetime.now().year - 1)
-
+    """Fetch full financial statement for one company/year."""
     params = {
         'crtfc_key': self._api_key,
         'corp_code': corp_code,
