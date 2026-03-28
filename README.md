@@ -37,7 +37,7 @@ python -m data.bronze.update --tickers-file data/snp500.txt \
   --sec-user-agent "your_name research (your@email.com)"
 
 # 2. Build Silver + Gold screening panel
-python -m data.silver.build
+python -m data.silver.build --markets us
 python -c "
 from pathlib import Path
 from data.gold.screening.panel import ScreeningPanelBuilder
@@ -54,7 +54,7 @@ builder.save()
 python -m screening.run --top 25
 ```
 
-### DCF Valuation
+### DCF Valuation (US)
 
 ```bash
 # 1. Data ingestion
@@ -62,11 +62,33 @@ python -m data.bronze.update --tickers-file example/tickers/bigtech.txt \
   --sec-user-agent "your_name research (your@email.com)"
 
 # 2. Build pipeline
-python -m data.silver.build
+python -m data.silver.build --markets us
 python -m data.gold.valuation.build
 
 # 3. Run valuation
 python -m valuation.run --ticker AAPL --as-of 2024-09-30
+
+# 4. IV band chart
+python -m valuation.analysis.plot_prices \
+  --tickers AAPL --market us \
+  --config-dir scenarios/base --output-dir output/charts
+```
+
+### DCF Valuation (Korea)
+
+```bash
+# 1. Build Silver (DART + KRX)
+python -m data.silver.build --markets kr
+
+# 2. Run valuation
+python -m valuation.run --ticker 000270 --market kr --as-of 2025-03-31 \
+  --gold-path data/gold/out/valuation_panel.parquet
+
+# 3. IV band chart
+python -m valuation.analysis.plot_prices \
+  --tickers 000270 192080 005850 --market kr \
+  --config-dir scenarios/base --output-dir output/charts \
+  --gold-path data/gold/out/valuation_panel.parquet
 ```
 
 ### Scenario Experimentation + Visualization
