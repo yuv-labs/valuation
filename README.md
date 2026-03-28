@@ -77,12 +77,8 @@ python -m valuation.analysis.plot_prices \
 ### DCF Valuation (Korea)
 
 ```bash
-# 1. Build KRX Silver prices
-python -c "
-from data.silver.sources.krx.pipeline import build_krx_prices
-from pathlib import Path
-build_krx_prices(Path('data/bronze/out'), Path('data/silver/out'))
-"
+# 1. Build Silver (DART + KRX)
+python -m data.silver.build --markets kr
 
 # 2. Run valuation
 python -m valuation.run --ticker 000270 --market kr --as-of 2025-03-31 \

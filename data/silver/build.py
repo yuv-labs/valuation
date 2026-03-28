@@ -2,12 +2,14 @@
 Silver layer build CLI.
 
 Usage:
-    python -m data.silver [--sources sec stooq]
-                          [--bronze-dir PATH] [--silver-dir PATH]
+    python -m data.silver.build --markets us kr
+    python -m data.silver.build --markets us
+    python -m data.silver.build --markets kr
 """
 import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 from data.silver.core.pipeline import PipelineContext
 from data.silver.sources.sec.pipeline import SECPipeline
@@ -18,55 +20,114 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def main():
-  parser = argparse.ArgumentParser(description='Build Silver layer')
-  parser.add_argument('--sources',
-                      nargs='+',
-                      choices=['sec', 'stooq'],
-                      default=['sec', 'stooq'],
-                      help='Sources to build')
-  parser.add_argument('--bronze-dir',
-                      type=Path,
-                      default=Path('data/bronze/out'),
-                      help='Bronze directory')
-  parser.add_argument('--silver-dir',
-                      type=Path,
-                      default=Path('data/silver/out'),
-                      help='Silver output directory')
+# Market -> pipeline sources mapping.
+MARKET_SOURCES: dict[str, dict[str, type]] = {
+    'us': {
+        'sec': SECPipeline,
+        'stooq': StooqPipeline,
+    },
+    'kr': {},  # KRX pipeline is standalone (not Pipeline subclass)
+}
+
+
+def _build_krx(bronze_dir: Path, silver_dir: Path) -> bool:
+  """Build KRX Silver prices (standalone, not Pipeline-based)."""
+  from data.silver.sources.krx.pipeline import \
+      build_krx_prices  # pylint: disable=import-outside-toplevel
+  try:
+    build_krx_prices(bronze_dir, silver_dir)
+    return True
+  except (FileNotFoundError, ValueError) as exc:
+    logger.error('KRX failed: %s', exc)
+    return False
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+      description='Build Silver layer')
+  parser.add_argument(
+      '--markets',
+      nargs='+',
+      choices=['us', 'kr'],
+      default=['us'],
+      help='Markets to build (default: us)')
+  # Keep --sources for backward compatibility.
+  parser.add_argument(
+      '--sources',
+      nargs='+',
+      choices=['sec', 'stooq'],
+      default=None,
+      help='(Legacy) Individual sources to build')
+  parser.add_argument(
+      '--bronze-dir',
+      type=Path,
+      default=Path('data/bronze/out'))
+  parser.add_argument(
+      '--silver-dir',
+      type=Path,
+      default=Path('data/silver/out'))
   args = parser.parse_args()
 
-  context = PipelineContext(bronze_dir=args.bronze_dir,
-                            silver_dir=args.silver_dir)
+  context = PipelineContext(
+      bronze_dir=args.bronze_dir,
+      silver_dir=args.silver_dir)
 
-  pipelines = {}
-  if 'sec' in args.sources:
-    pipelines['sec'] = SECPipeline(context)
-  if 'stooq' in args.sources:
-    pipelines['stooq'] = StooqPipeline(context)
+  # Resolve which pipelines to run.
+  pipeline_classes: dict[str, type] = {}
 
-  results = {}
-  for name, pipeline in pipelines.items():
+  if args.sources:
+    # Legacy --sources mode.
+    if 'sec' in args.sources:
+      pipeline_classes['sec'] = SECPipeline
+    if 'stooq' in args.sources:
+      pipeline_classes['stooq'] = StooqPipeline
+  else:
+    # Market-based mode.
+    for market in args.markets:
+      srcs = MARKET_SOURCES.get(market, {})
+      for name, cls in srcs.items():
+        pipeline_classes[name] = cls
+
+  # Run Pipeline-based sources.
+  results: dict[str, Any] = {}
+  for name, cls in pipeline_classes.items():
     logger.info('Running %s pipeline...', name)
-    results[name] = pipeline.run()
+    results[name] = cls(context).run()
 
-  success_count = sum(1 for r in results.values() if r.success)
+  # Run KRX (standalone).
+  if 'kr' in (args.markets or []) and not args.sources:
+    logger.info('Running krx pipeline...')
+    krx_ok = _build_krx(args.bronze_dir, args.silver_dir)
+    results['krx'] = type(
+        'Result', (), {'success': krx_ok, 'errors': [],
+                        'datasets': {}})()
+
+  # Summary.
+  success_count = sum(
+      1 for r in results.values() if r.success)
   print()
   print('=' * 70)
-  print(f'Build Summary: {success_count}/{len(results)} pipelines succeeded')
+  print(
+      f'Build Summary: {success_count}/{len(results)} '
+      f'pipelines succeeded')
   print('=' * 70)
 
   for name, result in results.items():
     if result.success:
-      logger.info('✓ %s pipeline completed', name)
-      for dataset_name, df in result.datasets.items():
-        logger.info('  %s: %s', dataset_name, df.shape)
+      logger.info('\u2713 %s pipeline completed', name)
+      if hasattr(result, 'datasets'):
+        for dname, df in result.datasets.items():
+          if hasattr(df, 'shape'):
+            logger.info('  %s: %s', dname, df.shape)
     else:
-      logger.error('✗ %s pipeline failed', name)
-      for error in result.errors:
-        logger.error('  %s', error)
+      logger.error('\u2717 %s pipeline failed', name)
+      if hasattr(result, 'errors'):
+        for error in result.errors:
+          logger.error('  %s', error)
 
   if success_count < len(results):
     raise SystemExit(1)
+
 
 if __name__ == '__main__':
   main()
