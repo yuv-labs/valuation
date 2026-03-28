@@ -1,16 +1,17 @@
-# DCF Valuation Framework
+# Equity Analysis
 
-Production-grade DCF valuation framework with ETL pipeline, policy-based
-architecture, and backtesting capabilities.
+Equity analysis framework: DCF valuation + multi-factor stock screening
+for US and Korean markets.
 
-> **Disclaimer**: This is a valuation tool for research and analysis purposes.
-> Investment decisions are the sole responsibility of the investor. This tool
-> does not constitute financial advice.
+> **Disclaimer**: This is an analysis tool for research purposes.
+> Investment decisions are the sole responsibility of the investor.
+> This tool does not constitute financial advice.
 
 ## Requirements
 
-- Python >= 3.9 (tested with 3.12)
+- Python 3.13
 - Dependencies managed via `pyproject.toml`
+- DART API key for Korean data (free at opendart.fss.or.kr)
 
 ### Installation
 
@@ -28,22 +29,44 @@ pip install -e ".[dev]"
 
 ## Quick Start
 
+### Stock Screening (US + Korea)
+
+```bash
+# 1. Ingest US data (SEC + Stooq prices)
+python -m data.bronze.update --tickers-file data/snp500.txt \
+  --sec-user-agent "your_name research (your@email.com)"
+
+# 2. Build Silver + Gold screening panel
+python -m data.silver.build
+python -c "
+from pathlib import Path
+from data.gold.screening.panel import ScreeningPanelBuilder
+builder = ScreeningPanelBuilder(
+    silver_dir=Path('data/silver/out'),
+    gold_dir=Path('data/gold/out'),
+    bronze_dir=Path('data/bronze/out'),  # includes KR data
+)
+builder.build()
+builder.save()
+"
+
+# 3. Run screening
+python -m screening.run --top 25
+```
+
+### DCF Valuation
+
 ```bash
 # 1. Data ingestion
 python -m data.bronze.update --tickers-file example/tickers/bigtech.txt \
-  --sec-user-agent "${your_name} valuation research (${your_email})"
+  --sec-user-agent "your_name research (your@email.com)"
 
 # 2. Build pipeline
-python -m data.silver.build && python -m data.gold.build
+python -m data.silver.build
+python -m data.gold.valuation.build
 
 # 3. Run valuation
 python -m valuation.run --ticker AAPL --as-of 2024-09-30
-
-# 4. Batch valuation
-python -m valuation.analysis.batch_valuation \
-  --tickers-file example/tickers/bigtech.txt \
-  --as-of-date 2024-09-30 \
-  --output output/valuation/bigtech.csv -v
 ```
 
 ### Scenario Experimentation + Visualization
@@ -158,9 +181,34 @@ Irving Fisher (1930) and John Burr Williams (1938).
 ### Data Pipeline (Bronze → Silver → Gold)
 
 ```text
-Bronze (Raw)         Silver (Normalized)      Gold (Analytical)
-├─ SEC filings    →  ├─ metrics_quarterly  →  ├─ valuation_panel  (latest)
-└─ Stock prices      └─ companies             └─ backtest_panel   (all PIT)
+Bronze (Raw)              Silver (Normalized)     Gold (Views)
+├─ SEC filings         →  ├─ facts_long        →  ├─ valuation/  (DCF)
+├─ Stooq prices           └─ companies            ├─ backtest/   (PIT)
+├─ DART filings (KR)                               └─ screening/  (ratios)
+└─ KRX prices (KR)
+```
+
+Bronze providers are pluggable (`BronzeProvider` ABC):
+
+- `SECProvider` / `StooqProvider` for US
+- `DARTProvider` / `KRXProvider` for Korea
+
+Gold panels are independent modules, each with own `build.py`:
+
+- `python -m data.gold.valuation.build`
+- `python -m data.gold.backtest.build`
+- `python -m data.gold.screening.build` (via Python API)
+
+### Screening Framework
+
+```text
+Gold screening_panel (PE, PB, ROE, ROIC, margins, ...)
+       ↓
+Filters (Undervalued → Moat → Growth)
+       ↓
+Scorers (Fear + Quality → Opportunity)
+       ↓
+Ranked results
 ```
 
 ### Valuation Framework
@@ -178,70 +226,78 @@ ValuationResult (IV, diagnostics)
 ## Project Structure
 
 ```text
-valuation/
-├── README.md              # This file
-├── PROJECT_STRUCTURE.md   # Detailed structure
-│
+equity-analysis/
 ├── data/                  # ETL pipeline
-│   ├── README.md         # Data pipeline docs
-│   ├── bronze/           # Raw data ingestion (SEC, Stooq)
-│   ├── silver/           # Normalized metrics (quarterly)
-│   │   └── README.md     # Silver layer details
-│   └── gold/             # Analytical panels
-│       └── README.md     # Gold layer details
+│   ├── bronze/
+│   │   ├── providers/     # Pluggable data sources
+│   │   │   ├── base.py    # BronzeProvider ABC
+│   │   │   ├── sec.py     # SEC EDGAR (US financials)
+│   │   │   ├── stooq.py   # Stooq (US prices)
+│   │   │   ├── dart.py    # DART (KR financials + shares)
+│   │   │   └── krx.py     # KRX (KR prices)
+│   │   └── update.py      # CLI orchestrator
+│   ├── silver/
+│   │   ├── config/
+│   │   │   ├── metric_specs.py     # US SEC XBRL tags (12 metrics)
+│   │   │   └── metric_specs_kr.py  # KR DART account names
+│   │   └── sources/
+│   │       ├── sec/       # SEC extraction pipeline
+│   │       └── dart/      # DART extraction pipeline
+│   └── gold/
+│       ├── core/          # BasePanelBuilder
+│       ├── valuation/     # DCF panel (latest version)
+│       ├── backtest/      # PIT panel (all versions)
+│       └── screening/     # Screening panel (ratios)
 │
-├── valuation/            # Valuation framework
-│   ├── README.md        # Framework docs
-│   ├── run.py           # Single valuation
-│   ├── domain/          # Typed domain objects
-│   ├── engine/          # Pure DCF math
-│   ├── policies/        # Estimation policies
-│   ├── scenarios/       # Scenario configs
-│   └── analysis/        # Analysis tools
-│       ├── README.md    # Analysis docs
-│       ├── batch_valuation.py       # Multi-company valuation
-│       ├── backtest_from_configs.py # Config-based backtest
-│       ├── generate_grid_configs.py # Grid search generator
-│       ├── plot_prices.py           # Scenario visualization
-│       ├── band_screening.py        # Stock screening
-│       └── sensitivity.py           # Sensitivity tables
+├── valuation/             # DCF valuation engine
+│   ├── domain/            # Typed domain objects
+│   ├── engine/            # Pure DCF math
+│   ├── policies/          # Estimation policies
+│   └── analysis/          # Batch valuation, backtesting
 │
-├── tools/               # Utility scripts
-│   ├── filter_tickers.py    # Sector-based filtering
-│   └── parquet_to_csv.py    # Data export
+├── screening/             # Stock screening
+│   ├── run.py             # CLI: python -m screening.run
+│   ├── filters/           # Undervalued, Moat, Growth
+│   ├── scorers/           # Fear, Quality, Composite
+│   └── report/            # Output formatting
 │
-├── scenarios/           # JSON scenario configs
-│   ├── README.md       # Scenario documentation
-│   ├── base/           # Core scenarios (default, conservative, aggressive)
-│   ├── capex_experiments/   # CAPEX method variations
-│   └── discount_experiments/  # Discount rate sensitivity
-│
-└── results/             # Output files (CSV, charts)
+├── tools/                 # Utility scripts
+├── scenarios/             # JSON scenario configs
+└── output/                # Screening results (CSV)
 ```
 
 ## Key Features
 
-- **Policy-based architecture**: Easy experimentation with different methodologies
-- **PIT (Point-in-Time)**: Only uses data available at backtest date
-- **JSON config scenarios**: Version-controlled, reproducible experiments
-- **Grid search**: Automatic generation of scenario combinations
-- **Multiple CAPEX methods**: Raw, 3yr weighted, intensity clipping
-- **Batch processing**: Valuation for entire stock lists
-- **Parallel processing**: Concurrent execution for faster analysis
-- **Stock screening**: Filter undervalued stocks within reliable valuation bands
-- **Visualization**: Compare scenarios with intelligent legend (differences only)
-- **Sensitivity analysis**: 2D tables (discount × growth rates)
-- **Full diagnostics**: Every policy returns value + detailed diagnostics
+### Screening
+
+- **Multi-factor screening**: PE, PB, ROE, ROIC, FCF yield,
+  margins, debt ratios
+- **Signal-based filters**: Undervalued, Moat, Growth
+- **Composite scoring**: Fear + Quality = Opportunity
+- **US + Korea**: SEC + DART official financial data
+
+### Valuation
+
+- **Policy-based architecture**: Easy experimentation
+- **PIT (Point-in-Time)**: No look-ahead bias
+- **JSON config scenarios**: Reproducible experiments
+- **Grid search**: Scenario combinations
+- **Batch processing**: Entire stock lists
 
 ## Data Coverage
 
-**Available**: 10,500+ US-listed companies from SEC EDGAR
+### US Market
 
-**Recommended for DCF**: Non-financial sectors (Tech, Consumer, Industrial,
-Healthcare, Energy, Materials, Telecom, Retail)
+- **Source**: SEC EDGAR (10,500+ companies) + Stooq (prices)
+- **Metrics**: 12 fundamentals (CFO, CAPEX, Revenue, etc.)
+- **Coverage**: 83-100% across S&P 500
 
-**Not recommended**: Financial services (Banks, Insurance), Utilities,
-REITs - different valuation approaches needed
+### Korean Market
+
+- **Source**: DART Open API + KRX via pykrx (prices)
+- **Metrics**: 11 fundamentals from K-IFRS
+- **Limitation**: Financial companies not available via DART
+- **Requires**: DART API key (free at opendart.fss.or.kr)
 
 ### Ticker Filtering
 

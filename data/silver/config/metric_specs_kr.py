@@ -98,8 +98,7 @@ METRIC_SPECS_KR = {
     'TOTAL_DEBT': {
         'sj_div': ['BS'],
         'account_names': [
-            '장기차입금',
-            '사채',
+            '부채총계',
         ],
         'unit': 'KRW',
         'is_ytd': False,
