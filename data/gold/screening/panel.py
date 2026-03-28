@@ -135,8 +135,11 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     # Special case: SHARES stays as shares_q.
     col_map['SHARES'] = {'q_val': 'shares_q'}
 
-    # Pivot each metric separately, then merge.
-    base_cols = ['cik10', 'end', 'filed']
+    # Pivot each metric separately, then merge on (cik10, end).
+    # Note: we merge WITHOUT filed to avoid row fragmentation when
+    # different metrics have different filed dates for the same end
+    # (e.g. amended filings 10-K/A).
+    merge_cols = ['cik10', 'end']
     fiscal_cols = ['fiscal_year', 'fiscal_quarter']
 
     parts: list[pd.DataFrame] = []
@@ -146,7 +149,7 @@ class ScreeningPanelBuilder(BasePanelBuilder):
         continue
 
       rename = col_map.get(metric, {})
-      keep_cols = list(base_cols)
+      keep_cols = list(merge_cols)
       if not parts:
         keep_cols += fiscal_cols
 
@@ -163,8 +166,17 @@ class ScreeningPanelBuilder(BasePanelBuilder):
 
     result = parts[0]
     for part in parts[1:]:
-      merge_on = [c for c in base_cols if c in part.columns]
-      result = result.merge(part, on=merge_on, how='outer')
+      on = [c for c in merge_cols if c in part.columns]
+      result = result.merge(part, on=on, how='outer')
+
+    # Add filed as max(filed) per (cik10, end) from the latest
+    # values we already filtered.
+    filed_per_end = (
+        latest.groupby(['cik10', 'end'])['filed']
+        .max()
+        .reset_index())
+    result = result.merge(
+        filed_per_end, on=['cik10', 'end'], how='left')
 
     return result
 
