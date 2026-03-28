@@ -54,7 +54,7 @@ builder.save()
 python -m screening.run --top 25
 ```
 
-### DCF Valuation
+### DCF Valuation (US)
 
 ```bash
 # 1. Data ingestion
@@ -67,6 +67,32 @@ python -m data.gold.valuation.build
 
 # 3. Run valuation
 python -m valuation.run --ticker AAPL --as-of 2024-09-30
+
+# 4. IV band chart
+python -m valuation.analysis.plot_prices \
+  --tickers AAPL --market us \
+  --config-dir scenarios/base --output-dir output/charts
+```
+
+### DCF Valuation (Korea)
+
+```bash
+# 1. Build KRX Silver prices
+python -c "
+from data.silver.sources.krx.pipeline import build_krx_prices
+from pathlib import Path
+build_krx_prices(Path('data/bronze/out'), Path('data/silver/out'))
+"
+
+# 2. Run valuation
+python -m valuation.run --ticker 000270 --market kr --as-of 2025-03-31 \
+  --gold-path data/gold/out/valuation_panel.parquet
+
+# 3. IV band chart
+python -m valuation.analysis.plot_prices \
+  --tickers 000270 192080 005850 --market kr \
+  --config-dir scenarios/base --output-dir output/charts \
+  --gold-path data/gold/out/valuation_panel.parquet
 ```
 
 ### Scenario Experimentation + Visualization
