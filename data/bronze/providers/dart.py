@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 _CORP_CODE_URL = 'https://opendart.fss.or.kr/api/corpCode.xml'
 _FINSTATE_URL = (
     'https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json')
+_STOCK_TOTQY_URL = (
+    'https://opendart.fss.or.kr/api/stockTotqySttus.json')
 
 # Report codes: Q1, Q2(半期), Q3, Annual
 _REPRT_CODES_ALL = ['11013', '11012', '11014', '11011']
@@ -156,6 +158,24 @@ class DARTProvider(BronzeProvider):
             errors.append(
                 f'{stock_code}/{year}/{qtr}: {exc}')
 
+      # 4) Fetch shares outstanding (annual only)
+      shares_path = (dart_dir / 'shares'
+                     / f'{corp_code}.json')
+      _ensure_dir(dart_dir / 'shares')
+      if force or not _is_fresh(shares_path, refresh_days):
+        try:
+          latest_year = years[-1]
+          data = self._fetch_shares(corp_code, latest_year)
+          if data.get('status') == '000' and data.get('list'):
+            content = json.dumps(
+                data, ensure_ascii=False,
+                indent=2).encode('utf-8')
+            _atomic_write_bytes(shares_path, content)
+            fetched += 1
+            time.sleep(self._min_interval)
+        except (requests.RequestException, OSError) as exc:
+          errors.append(f'{stock_code}/shares: {exc}')
+
     return ProviderResult(
         provider_name=self.name,
         fetched=fetched, skipped=skipped,
@@ -190,6 +210,24 @@ class DARTProvider(BronzeProvider):
         'fs_div': 'CFS',
     }
     resp = requests.get(_FINSTATE_URL, params=params, timeout=30)
+    resp.raise_for_status()
+    result: dict[str, Any] = resp.json()
+    return result
+
+  def _fetch_shares(
+      self,
+      corp_code: str,
+      bsns_year: str,
+  ) -> dict[str, Any]:
+    """Fetch shares outstanding for one company."""
+    params = {
+        'crtfc_key': self._api_key,
+        'corp_code': corp_code,
+        'bsns_year': bsns_year,
+        'reprt_code': _REPRT_CODE_ANNUAL,
+    }
+    resp = requests.get(
+        _STOCK_TOTQY_URL, params=params, timeout=30)
     resp.raise_for_status()
     result: dict[str, Any] = resp.json()
     return result
