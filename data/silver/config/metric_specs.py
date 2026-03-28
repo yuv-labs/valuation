@@ -95,8 +95,7 @@ METRIC_SPECS = {
         'namespace': 'us-gaap',
         'tags': [
             'StockholdersEquity',
-            'StockholdersEquityIncludingPortion'
-            'AttributableToNoncontrollingInterest',
+            'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',  # pylint: disable=line-too-long
         ],
         'unit': 'USD',
         'is_ytd': False,
