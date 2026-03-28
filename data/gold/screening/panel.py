@@ -137,11 +137,6 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     )
     wide = wide.dropna(subset=['ticker'])
 
-    # Adjust shares for stock splits before price join.
-    from valuation.data_loader import \
-        ValuationDataLoader  # pylint: disable=import-outside-toplevel
-    wide = ValuationDataLoader._adjust_for_splits(wide)  # pylint: disable=protected-access
-
     # Join prices (PIT: first price after filed date).
     panel = join_prices_pit(wide, prices, ticker_col='ticker')
     panel = calculate_market_cap(
@@ -168,6 +163,7 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     self.panel = panel.sort_values(
         ['ticker', 'end']).reset_index(drop=True)
     return self.panel
+
 
   def _build_wide_metrics(
       self, metrics_q: pd.DataFrame) -> pd.DataFrame:

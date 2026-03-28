@@ -25,15 +25,21 @@ _TABLE_COLS = [
 
 
 def _fp(val: Any) -> str:
-  if val is None or (isinstance(val, float) and pd.isna(val)):
+  try:
+    if val is None or pd.isna(val):
+      return '-'
+    return f'{float(val) * 100:.1f}%'
+  except (TypeError, ValueError):
     return '-'
-  return f'{float(val) * 100:.1f}%'
 
 
 def _fn(val: Any) -> str:
-  if val is None or (isinstance(val, float) and pd.isna(val)):
+  try:
+    if val is None or pd.isna(val):
+      return '-'
+    return f'{float(val):.1f}'
+  except (TypeError, ValueError):
     return '-'
-  return f'{float(val):.1f}'
 
 
 def print_table(df: pd.DataFrame) -> None:
