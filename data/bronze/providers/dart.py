@@ -158,23 +158,30 @@ class DARTProvider(BronzeProvider):
             errors.append(
                 f'{stock_code}/{year}/{qtr}: {exc}')
 
-      # 4) Fetch shares outstanding (annual only)
-      shares_path = (dart_dir / 'shares'
-                     / f'{corp_code}.json')
+      # 4) Fetch shares outstanding (annual + semi-annual)
       _ensure_dir(dart_dir / 'shares')
-      if force or not _is_fresh(shares_path, refresh_days):
-        try:
-          latest_year = years[-1]
-          data = self._fetch_shares(corp_code, latest_year)
-          if data.get('status') == '000' and data.get('list'):
-            content = json.dumps(
-                data, ensure_ascii=False,
-                indent=2).encode('utf-8')
-            _atomic_write_bytes(shares_path, content)
-            fetched += 1
-            time.sleep(self._min_interval)
-        except (requests.RequestException, OSError) as exc:
-          errors.append(f'{stock_code}/shares: {exc}')
+      latest_year = years[-1]
+      for shares_reprt, shares_label in [
+          (_REPRT_CODE_ANNUAL, 'annual'),
+          ('11012', 'semi'),
+      ]:
+        shares_path = (dart_dir / 'shares'
+                       / f'{corp_code}_{shares_label}.json')
+        if force or not _is_fresh(shares_path, refresh_days):
+          try:
+            data = self._fetch_shares(
+                corp_code, latest_year, shares_reprt)
+            if (data.get('status') == '000'
+                and data.get('list')):
+              content = json.dumps(
+                  data, ensure_ascii=False,
+                  indent=2).encode('utf-8')
+              _atomic_write_bytes(shares_path, content)
+              fetched += 1
+              time.sleep(self._min_interval)
+          except (requests.RequestException, OSError) as exc:
+            errors.append(
+                f'{stock_code}/shares/{shares_label}: {exc}')
 
     return ProviderResult(
         provider_name=self.name,
@@ -218,13 +225,14 @@ class DARTProvider(BronzeProvider):
       self,
       corp_code: str,
       bsns_year: str,
+      reprt_code: str = _REPRT_CODE_ANNUAL,
   ) -> dict[str, Any]:
-    """Fetch shares outstanding for one company."""
+    """Fetch shares outstanding for one company/period."""
     params = {
         'crtfc_key': self._api_key,
         'corp_code': corp_code,
         'bsns_year': bsns_year,
-        'reprt_code': _REPRT_CODE_ANNUAL,
+        'reprt_code': reprt_code,
     }
     resp = requests.get(
         _STOCK_TOTQY_URL, params=params, timeout=30)
