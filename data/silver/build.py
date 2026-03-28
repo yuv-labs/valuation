@@ -2,9 +2,9 @@
 Silver layer build CLI.
 
 Usage:
-    python -m data.silver.build --markets us kr
-    python -m data.silver.build --markets us
-    python -m data.silver.build --markets kr
+    python -m data.silver.build                  # US only (default)
+    python -m data.silver.build --markets kr     # Korea only
+    python -m data.silver.build --markets us kr  # Both
 """
 import argparse
 import logging
@@ -51,13 +51,6 @@ def main() -> None:
       choices=['us', 'kr'],
       default=['us'],
       help='Markets to build (default: us)')
-  # Keep --sources for backward compatibility.
-  parser.add_argument(
-      '--sources',
-      nargs='+',
-      choices=['sec', 'stooq'],
-      default=None,
-      help='(Legacy) Individual sources to build')
   parser.add_argument(
       '--bronze-dir',
       type=Path,
@@ -74,19 +67,10 @@ def main() -> None:
 
   # Resolve which pipelines to run.
   pipeline_classes: dict[str, type] = {}
-
-  if args.sources:
-    # Legacy --sources mode.
-    if 'sec' in args.sources:
-      pipeline_classes['sec'] = SECPipeline
-    if 'stooq' in args.sources:
-      pipeline_classes['stooq'] = StooqPipeline
-  else:
-    # Market-based mode.
-    for market in args.markets:
-      srcs = MARKET_SOURCES.get(market, {})
-      for name, cls in srcs.items():
-        pipeline_classes[name] = cls
+  for market in args.markets:
+    srcs = MARKET_SOURCES.get(market, {})
+    for name, cls in srcs.items():
+      pipeline_classes[name] = cls
 
   # Run Pipeline-based sources.
   results: dict[str, Any] = {}
@@ -95,7 +79,7 @@ def main() -> None:
     results[name] = cls(context).run()
 
   # Run KRX (standalone).
-  if 'kr' in (args.markets or []) and not args.sources:
+  if 'kr' in args.markets:
     logger.info('Running krx pipeline...')
     krx_ok = _build_krx(args.bronze_dir, args.silver_dir)
     results['krx'] = type(
