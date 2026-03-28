@@ -137,10 +137,21 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     )
     wide = wide.dropna(subset=['ticker'])
 
+    # Adjust shares for stock splits before price join.
+    from valuation.data_loader import \
+        ValuationDataLoader  # pylint: disable=import-outside-toplevel
+    wide = ValuationDataLoader._adjust_for_splits(wide)  # pylint: disable=protected-access
+
     # Join prices (PIT: first price after filed date).
     panel = join_prices_pit(wide, prices, ticker_col='ticker')
     panel = calculate_market_cap(
         panel, shares_col='shares_q', price_col='price')
+
+    # For the latest period per ticker, override with the most
+    # recent price so that screening PE/PB reflects current
+    # market conditions (not the PIT price at filing date).
+    panel = self._override_latest_price(panel, prices)
+
     panel = panel.drop(columns=['cik10'], errors='ignore')
 
     if self.min_date:
@@ -162,6 +173,58 @@ class ScreeningPanelBuilder(BasePanelBuilder):
       self, metrics_q: pd.DataFrame) -> pd.DataFrame:
     """Override: use our own pivot instead of CFO-anchored join."""
     return self._pivot_to_wide(metrics_q)
+
+  @staticmethod
+  def _override_latest_price(
+      panel: pd.DataFrame,
+      prices: pd.DataFrame,
+  ) -> pd.DataFrame:
+    """Replace price with most recent close for latest period."""
+    if panel.empty or prices.empty:
+      return panel
+
+    panel = panel.copy()
+    prices = prices.copy()
+    prices['date'] = pd.to_datetime(prices['date'])
+
+    # Normalize price ticker column.
+    if 'symbol' in prices.columns:
+      prices = prices.rename(columns={'symbol': 'ticker'})
+    if 'ticker' in prices.columns:
+      prices['ticker'] = (
+          prices['ticker'].str.replace('.US', '', regex=False))
+
+    # Get latest price per ticker.
+    latest_prices = (
+        prices.sort_values('date')
+        .groupby('ticker', as_index=False)
+        .tail(1)[['ticker', 'date', 'close']]
+        .rename(columns={'close': 'latest_price',
+                         'date': 'latest_date'}))
+
+    # Identify latest period per ticker in panel.
+    latest_end = (
+        panel.groupby('ticker')['end']
+        .max().reset_index()
+        .rename(columns={'end': 'max_end'}))
+
+    panel = panel.merge(latest_end, on='ticker', how='left')
+    panel = panel.merge(latest_prices, on='ticker', how='left')
+
+    is_latest = panel['end'] == panel['max_end']
+    has_price = panel['latest_price'].notna()
+    mask = is_latest & has_price
+
+    panel.loc[mask, 'price'] = panel.loc[mask, 'latest_price']
+    if 'shares_q' in panel.columns:
+      panel.loc[mask, 'market_cap'] = (
+          panel.loc[mask, 'latest_price']
+          * panel.loc[mask, 'shares_q'])
+
+    panel = panel.drop(
+        columns=['max_end', 'latest_price', 'latest_date'],
+        errors='ignore')
+    return panel
 
   def _pivot_to_wide(
       self, metrics_q: pd.DataFrame) -> pd.DataFrame:
