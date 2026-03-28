@@ -37,7 +37,7 @@ python -m data.bronze.update --tickers-file data/snp500.txt \
   --sec-user-agent "your_name research (your@email.com)"
 
 # 2. Build Silver + Gold screening panel
-python -m data.silver.build
+python -m data.silver.build --markets us
 python -c "
 from pathlib import Path
 from data.gold.screening.panel import ScreeningPanelBuilder
@@ -62,7 +62,7 @@ python -m data.bronze.update --tickers-file example/tickers/bigtech.txt \
   --sec-user-agent "your_name research (your@email.com)"
 
 # 2. Build pipeline
-python -m data.silver.build
+python -m data.silver.build --markets us
 python -m data.gold.valuation.build
 
 # 3. Run valuation
