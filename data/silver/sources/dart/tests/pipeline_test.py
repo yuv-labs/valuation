@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from data.silver.core.pipeline import PipelineContext
+from data.silver.sources.dart.pipeline import DARTPipeline
 
 # Minimal synthetic Bronze data for testing.
 CORP_XML = '''<?xml version="1.0" encoding="UTF-8"?>
@@ -109,8 +110,6 @@ def make_bronze(tmp_path):
 class TestDARTPipeline:
 
   def test_run_produces_successful_result(self, bronze_dir, tmp_path):
-    from data.silver.sources.dart.pipeline import \
-        DARTPipeline  # pylint: disable=import-outside-toplevel
     ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
     result = DARTPipeline(ctx).run()
 
@@ -118,8 +117,6 @@ class TestDARTPipeline:
     assert not result.errors
 
   def test_produces_facts_long_parquet(self, bronze_dir, tmp_path):
-    from data.silver.sources.dart.pipeline import \
-        DARTPipeline  # pylint: disable=import-outside-toplevel
     ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
     DARTPipeline(ctx).run()
 
@@ -131,8 +128,6 @@ class TestDARTPipeline:
 
   def test_facts_long_has_required_schema(self, bronze_dir, tmp_path):
     """Output must match SEC facts_long schema for Gold compatibility."""
-    from data.silver.sources.dart.pipeline import \
-        DARTPipeline  # pylint: disable=import-outside-toplevel
     ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
     DARTPipeline(ctx).run()
 
@@ -146,8 +141,6 @@ class TestDARTPipeline:
 
   def test_corp_code_mapped_to_stock_code(self, bronze_dir, tmp_path):
     """cik10 should be stock_code (005930), not corp_code (00126380)."""
-    from data.silver.sources.dart.pipeline import \
-        DARTPipeline  # pylint: disable=import-outside-toplevel
     ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
     DARTPipeline(ctx).run()
 
@@ -157,8 +150,6 @@ class TestDARTPipeline:
 
   def test_quarter_detection_from_filename(self, bronze_dir, tmp_path):
     """Q1 file → fiscal_quarter='Q1', FY file → fiscal_quarter='Q4'."""
-    from data.silver.sources.dart.pipeline import \
-        DARTPipeline  # pylint: disable=import-outside-toplevel
     ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
     DARTPipeline(ctx).run()
 
@@ -169,8 +160,6 @@ class TestDARTPipeline:
 
   def test_end_date_constructed_from_fy_and_quarter(
       self, bronze_dir, tmp_path):
-    from data.silver.sources.dart.pipeline import \
-        DARTPipeline  # pylint: disable=import-outside-toplevel
     ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
     DARTPipeline(ctx).run()
 
@@ -182,8 +171,6 @@ class TestDARTPipeline:
 
   def test_filed_date_estimated(self, bronze_dir, tmp_path):
     """Filed = end + 45d (Q1-Q3) or end + 90d (Q4)."""
-    from data.silver.sources.dart.pipeline import \
-        DARTPipeline  # pylint: disable=import-outside-toplevel
     ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
     DARTPipeline(ctx).run()
 
@@ -196,8 +183,6 @@ class TestDARTPipeline:
 
   def test_shares_integrated_into_facts(self, bronze_dir, tmp_path):
     """SHARES metric rows added from shares API data."""
-    from data.silver.sources.dart.pipeline import \
-        DARTPipeline  # pylint: disable=import-outside-toplevel
     ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
     DARTPipeline(ctx).run()
 
@@ -206,9 +191,19 @@ class TestDARTPipeline:
     assert not shares.empty
     assert shares.iloc[0]['val'] == pytest.approx(5_969_782_550.0)
 
+  def test_shares_have_valid_end_and_filed(
+      self, bronze_dir, tmp_path):
+    """SHARES rows must have real end/filed dates, not NaT."""
+    ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
+    DARTPipeline(ctx).run()
+
+    df = pd.read_parquet(tmp_path / 'dart' / 'facts_long.parquet')
+    shares = df[df['metric'] == 'SHARES']
+    assert not shares.empty
+    assert shares['end'].notna().all()
+    assert shares['filed'].notna().all()
+
   def test_produces_companies_parquet(self, bronze_dir, tmp_path):
-    from data.silver.sources.dart.pipeline import \
-        DARTPipeline  # pylint: disable=import-outside-toplevel
     ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
     DARTPipeline(ctx).run()
 
@@ -222,8 +217,6 @@ class TestDARTPipeline:
 
   def test_empty_bronze_produces_empty_result(self, tmp_path):
     """No DART data → pipeline succeeds with empty datasets."""
-    from data.silver.sources.dart.pipeline import \
-        DARTPipeline  # pylint: disable=import-outside-toplevel
     bronze = tmp_path / 'bronze'
     bronze.mkdir()
     silver = tmp_path / 'silver'

@@ -38,9 +38,15 @@ class DARTPipeline(Pipeline):
     else:
       facts = shares
 
+    # Fill SHARES end/filed from actual fact dates per stock.
+    if not facts.empty:
+      shares_mask = (
+          (facts['metric'] == 'SHARES') & facts['end'].isna())
+      if shares_mask.any():
+        facts = self._fill_shares_dates(facts, shares_mask)
+
     self.datasets['facts_long'] = facts
     self.datasets['companies'] = self._build_companies(facts)
-    self._corp_to_stock = corp_to_stock
 
   def transform(self) -> None:
     # Extraction already produces the target schema.
@@ -203,6 +209,34 @@ class DARTPipeline(Pipeline):
           'tag': 'shares',
       })
     return pd.DataFrame(rows)
+
+  @staticmethod
+  def _fill_shares_dates(
+      facts: pd.DataFrame,
+      shares_mask: pd.Series,
+  ) -> pd.DataFrame:
+    """Fill NaT end/filed on SHARES rows from other facts."""
+    non_shares = facts[~shares_mask & facts['end'].notna()]
+    result_parts = [facts[~shares_mask].copy()]
+
+    for cik10, share_rows in facts[shares_mask].groupby('cik10'):
+      cik_facts = non_shares[non_shares['cik10'] == cik10]
+      if cik_facts.empty:
+        continue
+      ends = cik_facts[['end', 'filed', 'fiscal_year',
+                         'fiscal_quarter', 'fy',
+                         'fp']].drop_duplicates()
+      for _, end_row in ends.iterrows():
+        expanded = share_rows.copy()
+        expanded['end'] = end_row['end']
+        expanded['filed'] = end_row['filed']
+        expanded['fiscal_year'] = end_row['fiscal_year']
+        expanded['fiscal_quarter'] = end_row['fiscal_quarter']
+        expanded['fy'] = end_row['fy']
+        expanded['fp'] = end_row['fp']
+        result_parts.append(expanded)
+
+    return pd.concat(result_parts, ignore_index=True)
 
   @staticmethod
   def _build_companies(facts: pd.DataFrame) -> pd.DataFrame:

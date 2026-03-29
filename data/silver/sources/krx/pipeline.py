@@ -112,7 +112,9 @@ class KRXPipeline(Pipeline):
               df[vol_col], errors='coerce')
         parts.append(out)
       except Exception:  # pylint: disable=broad-except
-        logger.warning('Failed to read %s', csv_path.name)
+        logger.warning(
+            'Failed to read %s', csv_path.name,
+            exc_info=True)
 
     if not parts:
       self.datasets['prices_daily'] = pd.DataFrame()
