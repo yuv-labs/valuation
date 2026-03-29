@@ -45,11 +45,35 @@ class PolicyBundle(TypedDict):
 PRE_MAINT_OE_POLICIES: dict[str, Callable[[], PreMaintenanceOEPolicy]] = {
     'ttm': TTMPreMaintenanceOE,
     'avg_3y': AvgCFO,
-    'normalized_margin_10p_reinv_20p': lambda: NormalizedMarginOE(
-        target_margin=0.10, reinvestment_rate=0.20),
-    'normalized_roic_15p_reinv_30p': lambda: NormalizedROICOE(
-        target_roic=0.15, reinvestment_rate=0.30),
 }
+
+
+def _resolve_pre_maint_oe(name: str) -> PreMaintenanceOEPolicy:
+  """Resolve pre_maint_oe policy, supporting dynamic parameterized names.
+
+  Static names: 'ttm', 'avg_3y'
+  Dynamic names:
+    'normalized_margin:<margin>:<reinv>' e.g. 'normalized_margin:0.08:0.20'
+    'normalized_roic:<roic>:<reinv>'     e.g. 'normalized_roic:0.15:0.30'
+  """
+  if name in PRE_MAINT_OE_POLICIES:
+    return PRE_MAINT_OE_POLICIES[name]()
+
+  parts = name.split(':')
+  if len(parts) == 3 and parts[0] == 'normalized_margin':
+    return NormalizedMarginOE(
+        target_margin=float(parts[1]),
+        reinvestment_rate=float(parts[2]))
+  if len(parts) == 3 and parts[0] == 'normalized_roic':
+    return NormalizedROICOE(
+        target_roic=float(parts[1]),
+        reinvestment_rate=float(parts[2]))
+
+  raise KeyError(
+      f"Unknown pre_maint_oe policy: '{name}'. "
+      f'Available: {list(PRE_MAINT_OE_POLICIES.keys())} '
+      f'or normalized_margin:<margin>:<reinv> / normalized_roic:<roic>:<reinv>'
+  )
 
 MAINT_CAPEX_POLICIES: dict[str, Callable[[], MaintenanceCapexPolicy]] = {
     'ttm': TTMCapex,
@@ -119,11 +143,7 @@ def create_policies(config: ScenarioConfig) -> PolicyBundle:
   Raises:
     KeyError: If a policy name is not found in the registry
   """
-  try:
-    pre_maint_oe_factory = PRE_MAINT_OE_POLICIES[config.pre_maint_oe]
-  except KeyError as e:
-    raise KeyError(f"Unknown pre_maint_oe policy: '{config.pre_maint_oe}'. "
-                   f'Available: {list(PRE_MAINT_OE_POLICIES.keys())}') from e
+  pre_maint_oe_instance = _resolve_pre_maint_oe(config.pre_maint_oe)
 
   try:
     maint_capex_factory = MAINT_CAPEX_POLICIES[config.maint_capex]
@@ -162,7 +182,7 @@ def create_policies(config: ScenarioConfig) -> PolicyBundle:
                    f'Available: {list(DISCOUNT_POLICIES.keys())}') from e
 
   return PolicyBundle(
-      pre_maint_oe=pre_maint_oe_factory(),
+      pre_maint_oe=pre_maint_oe_instance,
       maint_capex=maint_capex_factory(),
       growth=growth_factory(),
       fade=fade_factory(),

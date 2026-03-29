@@ -7,13 +7,15 @@ in the Gordon Growth Model for terminal value calculation.
 
 from abc import ABC
 from abc import abstractmethod
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from valuation.domain.types import PolicyOutput
 
+TerminalMethod = Literal['gordon', 'multiple']
+
 
 class TerminalParams(NamedTuple):
-  method: str
+  method: TerminalMethod
   value: float
 
 

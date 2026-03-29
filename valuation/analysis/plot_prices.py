@@ -615,9 +615,12 @@ Examples:
     with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
       futures = {executor.submit(process_ticker, t): t for t in tickers}
       for future in as_completed(futures):
-        future.result()
         ticker = futures[future]
-        logger.info('Completed: %s', ticker)
+        try:
+          future.result()
+          logger.info('Completed: %s', ticker)
+        except (ValueError, KeyError, OSError) as e:
+          logger.error('Failed %s: %s', ticker, e)
   else:
     for ticker in tickers:
       logger.info('Processing %s...', ticker)

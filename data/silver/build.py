@@ -49,7 +49,7 @@ def main() -> None:
       '--markets',
       nargs='+',
       choices=['us', 'kr'],
-      default=['us', 'kr'],
+      default=['us'],
       help='Markets to build (default: us)')
   parser.add_argument(
       '--bronze-dir',

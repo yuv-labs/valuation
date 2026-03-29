@@ -12,6 +12,9 @@ Key functions:
 
 from collections.abc import Sequence
 from math import isfinite
+from typing import Literal
+
+TerminalMethod = Literal['gordon', 'multiple']
 
 
 def compute_pv_explicit(
@@ -59,7 +62,7 @@ def compute_terminal_value(
     g_terminal: float,
     discount_rate: float,
     final_year: int,
-    tv_method: str = 'gordon',
+    tv_method: TerminalMethod = 'gordon',
     tv_param: float | None = None,
 ) -> float:
   """
@@ -98,7 +101,7 @@ def compute_intrinsic_value(
     growth_path: Sequence[float],
     g_terminal: float,
     discount_rate: float,
-    tv_method: str = 'gordon',
+    tv_method: TerminalMethod = 'gordon',
     tv_param: float | None = None,
 ) -> tuple[float, float, float]:
   """

@@ -134,13 +134,14 @@ def run_valuation(
   terminal_result = policies['terminal'].compute()
   all_diag.update({f'terminal_{k}': v for k, v in terminal_result.diag.items()})
 
+  terminal_params = terminal_result.value
+
   if growth_result.diag.get('below_threshold', False):
     logger.debug('%s: Growth below threshold, using 0%% growth path', ticker)
     growth_path = [0.0] * config.n_years
     all_diag['growth_path_override'] = 'zero_growth'
   else:
     # Determine the terminal growth to fade towards
-    terminal_params = terminal_result.value
     fade_g_terminal = (terminal_params.value
                        if terminal_params.method == 'gordon' else 0.02)
 
