@@ -9,12 +9,13 @@ valuation/
 ├── domain/         # Typed domain objects (FundamentalsSlice, ValuationResult, etc.)
 ├── engine/         # Pure DCF math functions (no pandas, no I/O)
 ├── policies/       # Pluggable estimation policies
+│   ├── pre_maintenance_oe.py  # NormalizedMarginOE, NormalizedROICOE
 │   ├── oe.py       # TTMOwnerEarnings, AvgQuarterlyOE, MedianQuarterlyOE
 │   ├── capex.py    # TTMCapex, WeightedAverageCapex, IntensityClippedCapex
 │   ├── growth.py   # CAGRGrowth (with threshold/clipping)
 │   ├── fade.py     # LinearFade, StepFade
 │   ├── shares.py   # AvgShareChange (buyback rate)
-│   ├── terminal.py # GordonTerminal
+│   ├── terminal.py # GordonTerminal, ExitMultipleTerminal
 │   └── discount.py # FixedRate
 ├── scenarios/      # ScenarioConfig + policy registry
 ├── analysis/       # AnalysisRunner + metrics
@@ -68,12 +69,13 @@ All inputs prepared by **policies**:
 
 | Input | Policy | Description |
 |-------|--------|-------------|
+| Pre-Maint OE | PreMaintOE | Normalized Earnings pre-capex (Margin avg, ROIC avg) |
 | OE0 | OE | Owner Earnings (TTM, avg, or median) |
 | Shares | Shares | Current diluted shares |
 | b | Shares | Buyback rate (5yr CAGR) |
 | g0 | Growth | Initial growth (3yr CAGR, clipped) |
 | g(t) | Fade | Growth path (linear fade) |
-| g_terminal | Terminal | Perpetual growth (3%) |
+| g_terminal | Terminal | Perpetual growth (Gordon) or Exit Multiple (5x, 7x, etc.) |
 | r | Discount | Required return (10%) |
 
 See `valuation/engine/dcf.py` for detailed math implementation.

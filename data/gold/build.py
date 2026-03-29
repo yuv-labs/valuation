@@ -30,6 +30,7 @@ def build_panels(
     panels: list[str],
     silver_dir: Path,
     gold_dir: Path,
+    bronze_dir: Path,
     min_date: str = '2010-01-01',
     validate: bool = True,
 ) -> None:
@@ -58,6 +59,7 @@ def build_panels(
         silver_dir=silver_dir,
         gold_dir=gold_dir,
         min_date=min_date,
+        bronze_dir=bronze_dir,
     )
 
     panel = builder.build()
@@ -100,6 +102,12 @@ def main() -> None:
       help='Gold layer output directory',
   )
   parser.add_argument(
+      '--bronze-dir',
+      type=Path,
+      default=Path('data/bronze/out'),
+      help='Bronze layer directory (for DART facts)',
+  )
+  parser.add_argument(
       '--min-date',
       type=str,
       default='2010-01-01',
@@ -116,6 +124,7 @@ def main() -> None:
       panels=args.panel,
       silver_dir=args.silver_dir,
       gold_dir=args.gold_dir,
+      bronze_dir=args.bronze_dir,
       min_date=args.min_date,
       validate=not args.no_validate,
   )

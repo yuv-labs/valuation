@@ -85,3 +85,54 @@ class AvgCFO(PreMaintenanceOEPolicy):
                             'pre_maint_oe': weighted_avg,
                             **diag,
                         })
+
+class NormalizedMarginOE(PreMaintenanceOEPolicy):
+  """
+  Normalized Pre-Maintenance OE based on long-term average margin.
+  FCF = Revenue * Target Margin * (1 - Reinvestment Rate)
+  """
+
+  def __init__(self, target_margin: float, reinvestment_rate: float):
+    self.target_margin = target_margin
+    self.reinvestment_rate = reinvestment_rate
+
+  def compute(self, data: FundamentalsSlice) -> PolicyOutput[float]:
+    revenue = data.latest_revenue
+    normalized_nopat = revenue * self.target_margin
+    normalized_fcf = normalized_nopat * (1.0 - self.reinvestment_rate)
+
+    return PolicyOutput(
+        value=normalized_fcf,
+        diag={
+            'pre_maint_oe_method': 'normalized_margin',
+            'target_margin': self.target_margin,
+            'reinvestment_rate': self.reinvestment_rate,
+            'normalized_nopat': normalized_nopat,
+            'latest_revenue': revenue,
+        })
+
+
+class NormalizedROICOE(PreMaintenanceOEPolicy):
+  """
+  Normalized Pre-Maintenance OE based on target ROIC and invested capital.
+  FCF = Invested Capital * Target ROIC * (1 - Reinvestment Rate)
+  """
+
+  def __init__(self, target_roic: float, reinvestment_rate: float):
+    self.target_roic = target_roic
+    self.reinvestment_rate = reinvestment_rate
+
+  def compute(self, data: FundamentalsSlice) -> PolicyOutput[float]:
+    ic = data.latest_invested_capital
+    normalized_nopat = ic * self.target_roic
+    normalized_fcf = normalized_nopat * (1.0 - self.reinvestment_rate)
+
+    return PolicyOutput(
+        value=normalized_fcf,
+        diag={
+            'pre_maint_oe_method': 'normalized_roic',
+            'target_roic': self.target_roic,
+            'reinvestment_rate': self.reinvestment_rate,
+            'normalized_nopat': normalized_nopat,
+            'latest_invested_capital': ic,
+        })

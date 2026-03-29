@@ -75,6 +75,7 @@ METRIC_SPECS_KR = {
         'sj_div': ['BS'],
         'account_names': [
             '자산총계',
+            '자산 총계',
         ],
         'unit': 'KRW',
         'is_ytd': False,
@@ -83,6 +84,7 @@ METRIC_SPECS_KR = {
         'sj_div': ['BS'],
         'account_names': [
             '자본총계',
+            '자본 총계',
         ],
         'unit': 'KRW',
         'is_ytd': False,
@@ -91,6 +93,7 @@ METRIC_SPECS_KR = {
         'sj_div': ['BS'],
         'account_names': [
             '유동부채',
+            '유동 부채',
         ],
         'unit': 'KRW',
         'is_ytd': False,
@@ -99,6 +102,7 @@ METRIC_SPECS_KR = {
         'sj_div': ['BS'],
         'account_names': [
             '부채총계',
+            '부채 총계',
         ],
         'unit': 'KRW',
         'is_ytd': False,
@@ -107,6 +111,7 @@ METRIC_SPECS_KR = {
         'sj_div': ['BS'],
         'account_names': [
             '현금및현금성자산',
+            '현금 및 현금성 자산',
         ],
         'unit': 'KRW',
         'is_ytd': False,

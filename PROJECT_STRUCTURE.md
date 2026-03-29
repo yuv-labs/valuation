@@ -37,11 +37,12 @@ valuation/
 │   ├── engine/            # Pure DCF math
 │   │   └── dcf.py         # compute_dcf_iv()
 │   ├── policies/          # Estimation policies
+│   │   ├── pre_maintenance_oe.py # Normalized earnings (Margin, ROIC)
 │   │   ├── capex.py       # CAPEX methods (raw, weighted, clipped)
 │   │   ├── growth.py      # Growth rate (CAGR, threshold, clip)
 │   │   ├── fade.py        # Fade strategies (linear, geometric)
 │   │   ├── shares.py      # Share buyback rate
-│   │   ├── terminal.py    # Terminal value (Gordon growth)
+│   │   ├── terminal.py    # Terminal value (Gordon growth, Exit Multiple)
 │   │   └── discount.py    # Discount rate
 │   ├── scenarios/         # Scenario configurations
 │   │   ├── config.py      # ScenarioConfig dataclass
@@ -55,10 +56,22 @@ valuation/
 │       ├── generate_grid_configs.py # Grid search generator
 │       ├── plot_prices.py        # Scenario visualization
 │       └── sensitivity.py        # Sensitivity tables (r × g0)
+├── screening/             # Stock screening framework
+│   ├── run.py             # Screening entrypoint
+│   ├── filters/           # Screening criteria (moat, undervalued, etc.)
+│   ├── scorers/           # Scoring models (quality, fear, composite)
+│   └── report/            # HTML/Markdown report generation
 │
-├── results/               # Output files (CSV, charts)
-└── tools/                # Utilities
-    └── parquet_to_csv.py # Convert parquet to CSV
+├── scenarios/             # Scenario configuration JSON files
+│   ├── base/              # Base scenarios (default, bull, bear)
+│   └── stocks/            # Stock-specific custom scenarios
+│
+├── example/               # Example outputs and input lists
+├── output/                # Output files (Charts, HTML reports)
+├── results/               # Additional output or cache files
+└── tools/                 # Utilities
+    ├── parquet_to_csv.py  # Convert parquet to CSV
+    └── filter_tickers.py  # Ticket filtering utilities
 ```
 
 ## Key Entry Points

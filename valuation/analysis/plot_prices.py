@@ -175,6 +175,7 @@ def load_configs_from_files(config_paths: list[Path]) -> list[ScenarioConfig]:
       configs.append(config)
       logger.info('Loaded config: %s from %s', config.name, path.name)
     except Exception as e:  # pylint: disable=broad-except
+      print(f'Error on {path}: {e}')
       logger.error('Failed to load %s: %s', path, e)
   return configs
 
@@ -243,11 +244,13 @@ def calculate_iv_for_date(
     }
 
   terminal_result = policies['terminal'].compute()
-  g_terminal = terminal_result.value
+  terminal_params = terminal_result.value
+  fade_g_terminal = (terminal_params.value
+                     if terminal_params.method == 'gordon' else 0.02)
 
   fade_result = policies['fade'].compute(
       g0=growth_result.value,
-      g_terminal=g_terminal,
+      g_terminal=fade_g_terminal,
       n_years=scenario.n_years,
   )
 
@@ -263,8 +266,11 @@ def calculate_iv_for_date(
       sh0=sh0,
       buyback_rate=buyback_rate,
       growth_path=fade_result.value,
-      g_terminal=g_terminal,
+      g_terminal=(terminal_params.value
+                  if terminal_params.method == 'gordon' else 0.0),
       discount_rate=discount_rate,
+      tv_method=terminal_params.method,
+      tv_param=terminal_params.value,
   )
 
   if pd.isna(iv):
@@ -322,7 +328,7 @@ def plot_scenario_comparison(
     logger.error('No scenarios provided')
     return
 
-  freq = f'{month_interval}M' if month_interval > 1 else 'M'
+  freq = f'{month_interval}ME' if month_interval > 1 else 'ME'
   backtest_dates = pd.date_range(start=start_date, end=end_date, freq=freq)
 
   results: dict[str, list] = {'dates': [], 'market_price': []}
@@ -405,7 +411,9 @@ def plot_scenario_comparison(
           alpha=1.0)
 
   ax.set_xlabel('Quarter End Date', fontsize=12, fontweight='bold')
-  ax.set_ylabel('Price per Share ($)', fontsize=12, fontweight='bold')
+  currency_symbol = '₩' if market == 'kr' else '$'
+  ax.set_ylabel(
+      f'Price per Share ({currency_symbol})', fontsize=12, fontweight='bold')
 
   title = f'{ticker} - Intrinsic Value Comparison vs Market Price'
   ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
@@ -607,12 +615,9 @@ Examples:
     with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
       futures = {executor.submit(process_ticker, t): t for t in tickers}
       for future in as_completed(futures):
+        future.result()
         ticker = futures[future]
-        try:
-          future.result()
-          logger.info('Completed: %s', ticker)
-        except (ValueError, KeyError, OSError) as e:
-          logger.error('Failed %s: %s', ticker, e)
+        logger.info('Completed: %s', ticker)
   else:
     for ticker in tickers:
       logger.info('Processing %s...', ticker)

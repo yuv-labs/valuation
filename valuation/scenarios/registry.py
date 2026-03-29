@@ -19,10 +19,13 @@ from valuation.policies.maintenance_capex import AvgCapex
 from valuation.policies.maintenance_capex import MaintenanceCapexPolicy
 from valuation.policies.maintenance_capex import TTMCapex
 from valuation.policies.pre_maintenance_oe import AvgCFO
+from valuation.policies.pre_maintenance_oe import NormalizedMarginOE
+from valuation.policies.pre_maintenance_oe import NormalizedROICOE
 from valuation.policies.pre_maintenance_oe import PreMaintenanceOEPolicy
 from valuation.policies.pre_maintenance_oe import TTMPreMaintenanceOE
 from valuation.policies.shares import AvgShareChange
 from valuation.policies.shares import SharePolicy
+from valuation.policies.terminal import ExitMultipleTerminal
 from valuation.policies.terminal import GordonTerminal
 from valuation.policies.terminal import TerminalPolicy
 from valuation.scenarios.config import ScenarioConfig
@@ -42,6 +45,10 @@ class PolicyBundle(TypedDict):
 PRE_MAINT_OE_POLICIES: dict[str, Callable[[], PreMaintenanceOEPolicy]] = {
     'ttm': TTMPreMaintenanceOE,
     'avg_3y': AvgCFO,
+    'normalized_margin_10p_reinv_20p': lambda: NormalizedMarginOE(
+        target_margin=0.10, reinvestment_rate=0.20),
+    'normalized_roic_15p_reinv_30p': lambda: NormalizedROICOE(
+        target_roic=0.15, reinvestment_rate=0.30),
 }
 
 MAINT_CAPEX_POLICIES: dict[str, Callable[[], MaintenanceCapexPolicy]] = {
@@ -50,6 +57,10 @@ MAINT_CAPEX_POLICIES: dict[str, Callable[[], MaintenanceCapexPolicy]] = {
 }
 
 GROWTH_POLICIES: dict[str, Callable[[], GrowthPolicy]] = {
+    'fixed_neg0p05': lambda: FixedGrowth(growth_rate=-0.05),
+    'fixed_0p00': lambda: FixedGrowth(growth_rate=0.00),
+    'fixed_0p02': lambda: FixedGrowth(growth_rate=0.02),
+    'fixed_0p03': lambda: FixedGrowth(growth_rate=0.03),
     'fixed_0p05': lambda: FixedGrowth(growth_rate=0.05),
     'fixed_0p06': lambda: FixedGrowth(growth_rate=0.06),
     'fixed_0p07': lambda: FixedGrowth(growth_rate=0.07),
@@ -72,6 +83,9 @@ SHARE_POLICIES: dict[str, Callable[[], SharePolicy]] = {
 TERMINAL_POLICIES: dict[str, Callable[[], TerminalPolicy]] = {
     'gordon_2pct': lambda: GordonTerminal(g_terminal=0.02),
     'gordon': lambda: GordonTerminal(g_terminal=0.03),
+    'exit_multiple_5x': lambda: ExitMultipleTerminal(multiple=5.0),
+    'exit_multiple_7x': lambda: ExitMultipleTerminal(multiple=7.0),
+    'exit_multiple_10x': lambda: ExitMultipleTerminal(multiple=10.0),
 }
 
 DISCOUNT_POLICIES: dict[str, Callable[[], DiscountPolicy]] = {

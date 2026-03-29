@@ -211,6 +211,32 @@ class TestComputeTerminalValue:
 
     assert tv_3y > tv_5y > tv_10y
 
+  def test_exit_multiple_terminal(self):
+    """Terminal value using exit multiple method."""
+    tv = compute_terminal_value(
+        final_oeps=10.0,
+        g_terminal=0.03,  # Should be ignored
+        discount_rate=0.10,
+        final_year=5,
+        tv_method='multiple',
+        tv_param=7.0,
+    )
+    # Expected: 10.0 * 7.0 = 70.0
+    # PV: 70.0 / (1.10^5) = 43.4645
+    assert tv == pytest.approx(43.464, abs=0.001)
+
+  def test_invalid_tv_method(self):
+    """Invalid terminal method should return nan."""
+    tv = compute_terminal_value(
+        final_oeps=10.0,
+        g_terminal=0.03,
+        discount_rate=0.10,
+        final_year=5,
+        tv_method='unknown',
+    )
+    assert math.isnan(tv)
+
+
 
 class TestComputeIntrinsicValue:
   """Tests for compute_intrinsic_value function."""
@@ -244,6 +270,31 @@ class TestComputeIntrinsicValue:
     assert pv_explicit == pytest.approx(4.757, abs=0.01)
     assert tv_component == pytest.approx(13.024, abs=0.01)
     assert iv == pytest.approx(17.781, abs=0.01)
+
+  def test_intrinsic_value_with_multiple(self):
+    """Public interface test for valuation using exit multiple terminal."""
+    iv, pv_explicit, tv_component = compute_intrinsic_value(
+        oe0=100.0,
+        sh0=100.0,
+        buyback_rate=0.0,
+        growth_path=[0.05, 0.05, 0.05], # 3 years
+        g_terminal=0.0, # Not used
+        discount_rate=0.10,
+        tv_method='multiple',
+        tv_param=8.0,
+    )
+    # OE: Y1=105, Y2=110.25, Y3=115.7625
+    # Sh: 100 constant
+    # OEPS: Y1=1.05, Y2=1.1025, Y3=1.157625
+    # PV explicit: 1.05/1.1 + 1.1025/1.21 + 1.157625/1.331
+    # = 0.954 + 0.911 + 0.869 = 2.734
+    # TV: 1.157625 * 8.0 = 9.261
+    # PV terminal: 9.261 / 1.331 = 6.957
+    # Total IV: 2.734 + 6.957 = 9.691
+    assert pv_explicit == pytest.approx(2.734, abs=0.01)
+    assert tv_component == pytest.approx(6.957, abs=0.01)
+    assert iv == pytest.approx(9.691, abs=0.01)
+
 
   def test_conservative_scenario(self):
     """Conservative valuation with low growth.
