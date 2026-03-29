@@ -3,9 +3,10 @@
 import pandas as pd
 
 from screening.scorers._utils import safe_float
+from screening.scorers.base import Scorer
 
 
-class FearScorer:
+class FearScorer(Scorer):
   """Score 0-100: higher = more fear/panic priced in."""
 
   def score(self, row: pd.Series) -> float:

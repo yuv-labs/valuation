@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from data.silver.core.pipeline import PipelineContext
+from data.silver.sources.dart.pipeline import DARTPipeline
+from data.silver.sources.krx.pipeline import KRXPipeline
 from data.silver.sources.sec.pipeline import SECPipeline
 from data.silver.sources.stooq.pipeline import StooqPipeline
 
@@ -26,20 +28,11 @@ MARKET_SOURCES: dict[str, dict[str, type]] = {
         'sec': SECPipeline,
         'stooq': StooqPipeline,
     },
-    'kr': {},  # KRX pipeline is standalone (not Pipeline subclass)
+    'kr': {
+        'dart': DARTPipeline,
+        'krx': KRXPipeline,
+    },
 }
-
-
-def _build_krx(bronze_dir: Path, silver_dir: Path) -> bool:
-  """Build KRX Silver prices (standalone, not Pipeline-based)."""
-  from data.silver.sources.krx.pipeline import \
-      build_krx_prices  # pylint: disable=import-outside-toplevel
-  try:
-    build_krx_prices(bronze_dir, silver_dir)
-    return True
-  except (FileNotFoundError, ValueError) as exc:
-    logger.error('KRX failed: %s', exc)
-    return False
 
 
 def main() -> None:
@@ -72,19 +65,11 @@ def main() -> None:
     for name, cls in srcs.items():
       pipeline_classes[name] = cls
 
-  # Run Pipeline-based sources.
+  # Run all pipelines.
   results: dict[str, Any] = {}
   for name, cls in pipeline_classes.items():
     logger.info('Running %s pipeline...', name)
     results[name] = cls(context).run()
-
-  # Run KRX (standalone).
-  if 'kr' in args.markets:
-    logger.info('Running krx pipeline...')
-    krx_ok = _build_krx(args.bronze_dir, args.silver_dir)
-    results['krx'] = type(
-        'Result', (), {'success': krx_ok, 'errors': [],
-                        'datasets': {}})()
 
   # Summary.
   success_count = sum(

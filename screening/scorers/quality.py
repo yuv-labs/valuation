@@ -3,9 +3,10 @@
 import pandas as pd
 
 from screening.scorers._utils import safe_float
+from screening.scorers.base import Scorer
 
 
-class QualityScorer:
+class QualityScorer(Scorer):
   """Score 0-100: higher = stronger fundamentals."""
 
   def score(self, row: pd.Series) -> float:
