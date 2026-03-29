@@ -12,6 +12,9 @@ Key functions:
 
 from collections.abc import Sequence
 from math import isfinite
+from typing import Literal
+
+TerminalMethod = Literal['gordon', 'multiple']
 
 
 def compute_pv_explicit(
@@ -59,6 +62,8 @@ def compute_terminal_value(
     g_terminal: float,
     discount_rate: float,
     final_year: int,
+    tv_method: TerminalMethod = 'gordon',
+    tv_param: float | None = None,
 ) -> float:
   """
   Compute discounted terminal value using Gordon Growth Model.
@@ -72,13 +77,20 @@ def compute_terminal_value(
   Returns:
     Present value of terminal value
 
-  Raises:
-    Returns nan if discount_rate <= g_terminal (model undefined)
+    Returns nan if method is unknown or invalid params
   """
-  if discount_rate <= g_terminal:
+  if tv_param is None:
+    tv_param = g_terminal
+
+  if tv_method == 'gordon':
+    if discount_rate <= tv_param:
+      return float('nan')
+    tv = (final_oeps * (1.0 + tv_param)) / (discount_rate - tv_param)
+  elif tv_method == 'multiple':
+    tv = final_oeps * tv_param
+  else:
     return float('nan')
 
-  tv = (final_oeps * (1.0 + g_terminal)) / (discount_rate - g_terminal)
   discounted_tv = tv / ((1.0 + discount_rate)**final_year)
   return discounted_tv
 
@@ -89,6 +101,8 @@ def compute_intrinsic_value(
     growth_path: Sequence[float],
     g_terminal: float,
     discount_rate: float,
+    tv_method: TerminalMethod = 'gordon',
+    tv_param: float | None = None,
 ) -> tuple[float, float, float]:
   """
   Compute intrinsic value per share using two-stage DCF model.
@@ -118,10 +132,14 @@ def compute_intrinsic_value(
   if not all(isfinite(g) for g in growth_path):
     return float('nan'), float('nan'), float('nan')
 
-  if not isfinite(g_terminal) or not isfinite(discount_rate):
+  if not isfinite(discount_rate):
     return float('nan'), float('nan'), float('nan')
 
-  if discount_rate <= g_terminal or sh0 <= 0 or n_years < 1:
+  if tv_method == 'gordon':
+    if not isfinite(g_terminal) or discount_rate <= g_terminal:
+      return float('nan'), float('nan'), float('nan')
+
+  if sh0 <= 0 or n_years < 1:
     return float('nan'), float('nan'), float('nan')
 
   pv_explicit, final_oeps, _ = compute_pv_explicit(oe0, sh0, buyback_rate,
@@ -131,7 +149,7 @@ def compute_intrinsic_value(
     return float('nan'), float('nan'), float('nan')
 
   tv_component = compute_terminal_value(final_oeps, g_terminal, discount_rate,
-                                        n_years)
+                                        n_years, tv_method, tv_param)
 
   if not isfinite(tv_component):
     return float('nan'), float('nan'), float('nan')

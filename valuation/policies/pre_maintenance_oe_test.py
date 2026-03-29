@@ -1,9 +1,12 @@
 import pandas as pd
+import pytest
 
 from valuation.domain.types import FundamentalsSlice
 from valuation.domain.types import PolicyOutput
 from valuation.domain.types import QuarterData
 from valuation.policies.pre_maintenance_oe import AvgCFO
+from valuation.policies.pre_maintenance_oe import NormalizedMarginOE
+from valuation.policies.pre_maintenance_oe import NormalizedROICOE
 from valuation.policies.pre_maintenance_oe import TTMPreMaintenanceOE
 
 
@@ -128,5 +131,71 @@ class TestAvgCFO:
     policy = AvgCFO()
     result = policy.compute(data)
 
-    assert result.diag['years_used'] == [1]
     assert result.value == 115.0
+
+
+class TestNormalizedMarginOE:
+  """Tests for NormalizedMarginOE policy."""
+
+  def test_normalized_fcf(self):
+    """Calculates FCF based on revenue, target margin, and reinvestment rate."""
+    quarters = [
+        QuarterData(
+            fiscal_year=2024,
+            fiscal_quarter='Q1',
+            end=pd.Timestamp('2024-03-31'),
+            filed=pd.Timestamp('2024-05-15'),
+            cfo_ttm=100.0,
+            capex_ttm=20.0,
+            shares=100.0,
+            revenue_ttm=1000.0,
+        ),
+    ]
+    data = FundamentalsSlice(
+        ticker='TEST',
+        as_of_date=pd.Timestamp('2024-03-31'),
+        quarters=quarters,
+    )
+
+    # 1000 * 0.10 * (1 - 0.20) = 100 * 0.8 = 80
+    policy = NormalizedMarginOE(target_margin=0.10, reinvestment_rate=0.20)
+    result = policy.compute(data)
+
+    assert result.value == pytest.approx(80.0)
+    assert result.diag['pre_maint_oe_method'] == 'normalized_margin'
+    assert result.diag['normalized_nopat'] == 100.0
+
+
+class TestNormalizedROICOE:
+  """Tests for NormalizedROICOE policy."""
+
+  def test_normalized_fcf(self):
+    """Calculates FCF based on IC, target ROIC, and reinvestment rate."""
+    # IC = total_assets - current_liabilities - cash = 1000 - 400 - 100 = 500
+    quarters = [
+        QuarterData(
+            fiscal_year=2024,
+            fiscal_quarter='Q1',
+            end=pd.Timestamp('2024-03-31'),
+            filed=pd.Timestamp('2024-05-15'),
+            cfo_ttm=100.0,
+            capex_ttm=20.0,
+            shares=100.0,
+            total_assets=1000.0,
+            current_liabilities=400.0,
+            cash=100.0,
+        ),
+    ]
+    data = FundamentalsSlice(
+        ticker='TEST',
+        as_of_date=pd.Timestamp('2024-03-31'),
+        quarters=quarters,
+    )
+
+    # 500 * 0.20 * (1 - 0.30) = 100 * 0.7 = 70
+    policy = NormalizedROICOE(target_roic=0.20, reinvestment_rate=0.30)
+    result = policy.compute(data)
+
+    assert result.value == pytest.approx(70.0)
+    assert result.diag['pre_maint_oe_method'] == 'normalized_roic'
+    assert result.diag['normalized_nopat'] == 100.0

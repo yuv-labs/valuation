@@ -58,6 +58,13 @@ class QuarterData:
   shares: Optional[float] = None
   cfo_q: Optional[float] = None
   capex_q: Optional[float] = None
+  # Normalized earnings support (nullable).
+  revenue_ttm: Optional[float] = None
+  ebit_ttm: Optional[float] = None
+  total_assets: Optional[float] = None
+  total_equity: Optional[float] = None
+  current_liabilities: Optional[float] = None
+  cash: Optional[float] = None
 
   @property
   def period(self) -> str:
@@ -135,6 +142,44 @@ class FundamentalsSlice:
   def shares_history(self) -> list[Optional[float]]:
     """List of shares values (oldest first)."""
     return [q.shares for q in self.quarters]
+
+  @property
+  def latest_revenue(self) -> float:
+    """Most recent TTM Revenue."""
+    val = self.latest.revenue_ttm
+    if val is None:
+      raise ValueError(f'{self.ticker}: Missing revenue_ttm in latest quarter')
+    return val
+
+  @property
+  def latest_ebit(self) -> float:
+    """Most recent TTM EBIT (Operating Income)."""
+    val = self.latest.ebit_ttm
+    if val is None:
+      raise ValueError(f'{self.ticker}: Missing ebit_ttm in latest quarter')
+    return val
+
+  @property
+  def latest_invested_capital(self) -> float:
+    """Most recent Invested Capital (Total Assets - Current Liab - Cash)."""
+    assets = self.latest.total_assets
+    cur_liab = self.latest.current_liabilities
+    cash = self.latest.cash
+    if assets is None or cur_liab is None:
+      raise ValueError(
+          f'{self.ticker}: Missing balance sheet data for invested capital')
+    cash_val = cash if cash is not None else 0.0
+    return assets - cur_liab - cash_val
+
+  @property
+  def revenue_ttm_history(self) -> list[Optional[float]]:
+    """List of TTM Revenue values (oldest first)."""
+    return [q.revenue_ttm for q in self.quarters]
+
+  @property
+  def ebit_ttm_history(self) -> list[Optional[float]]:
+    """List of TTM EBIT values (oldest first)."""
+    return [q.ebit_ttm for q in self.quarters]
 
   def weighted_yearly_avg(
       self,
@@ -254,6 +299,12 @@ class FundamentalsSlice:
           shares=_safe_float(row.get('shares_q')),
           cfo_q=_safe_float(row.get('cfo_q')),
           capex_q=_safe_float(row.get('capex_q')),
+          revenue_ttm=_safe_float(row.get('revenue_ttm')),
+          ebit_ttm=_safe_float(row.get('ebit_ttm')),
+          total_assets=_safe_float(row.get('total_assets_q')),
+          total_equity=_safe_float(row.get('total_equity_q')),
+          current_liabilities=_safe_float(row.get('current_liabilities_q')),
+          cash=_safe_float(row.get('cash_q')),
       )
       quarters.append(qd)
 
@@ -315,6 +366,12 @@ class FundamentalsSlice:
           shares=_safe_float(row.get('shares_q')),
           cfo_q=_safe_float(row.get('cfo_q')),
           capex_q=_safe_float(row.get('capex_q')),
+          revenue_ttm=_safe_float(row.get('revenue_ttm')),
+          ebit_ttm=_safe_float(row.get('ebit_ttm')),
+          total_assets=_safe_float(row.get('total_assets_q')),
+          total_equity=_safe_float(row.get('total_equity_q')),
+          current_liabilities=_safe_float(row.get('current_liabilities_q')),
+          cash=_safe_float(row.get('cash_q')),
       )
       quarters.append(qd)
 

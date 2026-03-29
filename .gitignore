@@ -10,3 +10,6 @@ venv
 !example/**/*.png
 .DS_Store
 .coverage
+*.egg-info/
+data/bronze/out/dart/CORPCODE.xml
+output/

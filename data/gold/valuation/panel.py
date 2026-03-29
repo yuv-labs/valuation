@@ -26,6 +26,12 @@ class ValuationPanelBuilder(BasePanelBuilder):
 
   REQUIRED_METRICS = ['CFO', 'CAPEX', 'SHARES']
 
+  # Additional metrics for normalized earnings policies.
+  _EXTRA_TTM_METRICS = ['REVENUE', 'EBIT', 'NET_INCOME']
+  _EXTRA_PIT_METRICS = [
+      'TOTAL_ASSETS', 'TOTAL_EQUITY', 'CURRENT_LIABILITIES', 'CASH',
+  ]
+
   def __init__(
       self,
       silver_dir: Path,
@@ -43,9 +49,12 @@ class ValuationPanelBuilder(BasePanelBuilder):
 
     # Append Korean data if available.
     if self._bronze_dir is not None:
-      kr_facts, kr_prices = self._load_kr_valuation_data(
+      kr_facts, kr_prices = self.load_kr_valuation_data(
           self._bronze_dir)
       if not kr_facts.empty:
+        # Align fy type before concat to avoid PyArrow mixed type issues.
+        # KR DART data 'fy' is string, SEC US data 'fy' might be int/float.
+        facts['fy'] = facts['fy'].astype(str)
         facts = pd.concat([facts, kr_facts], ignore_index=True)
         kr_companies = (
             kr_facts[['cik10']].drop_duplicates().copy())
@@ -60,6 +69,9 @@ class ValuationPanelBuilder(BasePanelBuilder):
 
     metrics_q = self._build_quarterly_metrics(facts)
     metrics_wide = self._build_wide_metrics(metrics_q)
+
+    # Merge additional metrics (revenue, ebit, balance sheet).
+    metrics_wide = self.merge_extra_metrics(metrics_q, metrics_wide)
 
     # Keep only latest filed version per (cik10, end)
     metrics_wide = metrics_wide.sort_values('filed')
@@ -81,14 +93,58 @@ class ValuationPanelBuilder(BasePanelBuilder):
     if self.min_date:
       panel = panel[panel['end'] >= self.min_date]
 
+    # Ensure all columns from schema exist (even if all NaN).
+    for col in self.schema.column_names():
+      if col not in panel.columns:
+        panel[col] = pd.NA
+
     self.panel = panel.sort_values(
         ['ticker', 'end']).reset_index(drop=True)
     return self.panel
 
+  def merge_extra_metrics(self, metrics_q: pd.DataFrame,
+                          metrics_wide: pd.DataFrame) -> pd.DataFrame:
+    """Merge revenue/EBIT/balance sheet metrics onto the wide panel.
+
+    For TTM metrics (REVENUE, EBIT): takes ttm_val.
+    For PIT metrics (TOTAL_ASSETS, etc.): takes q_val.
+    Joins on (cik10, end) with the latest filed version per metric.
+    """
+    all_extra = self._EXTRA_TTM_METRICS + self._EXTRA_PIT_METRICS
+    extra = metrics_q[metrics_q['metric'].isin(all_extra)].copy()
+    if extra.empty:
+      return metrics_wide
+
+    # Keep latest filed per (cik10, metric, end).
+    extra = extra.sort_values('filed')
+    extra = extra.groupby(
+        ['cik10', 'metric', 'end'], as_index=False).tail(1)
+
+    # Pivot each metric into a column.
+    for metric in self._EXTRA_TTM_METRICS:
+      mdf = extra[extra['metric'] == metric]
+      if mdf.empty:
+        continue
+      col_name = f'{metric.lower()}_ttm'
+      mdf = mdf[['cik10', 'end', 'ttm_val']].rename(
+          columns={'ttm_val': col_name})
+      metrics_wide = metrics_wide.merge(
+          mdf, on=['cik10', 'end'], how='left')
+
+    for metric in self._EXTRA_PIT_METRICS:
+      mdf = extra[extra['metric'] == metric]
+      if mdf.empty:
+        continue
+      col_name = f'{metric.lower()}_q'
+      mdf = mdf[['cik10', 'end', 'q_val']].rename(
+          columns={'q_val': col_name})
+      metrics_wide = metrics_wide.merge(
+          mdf, on=['cik10', 'end'], how='left')
+
+    return metrics_wide
+
   @staticmethod
-  def _load_kr_valuation_data(
-      bronze_dir: Path,
-  ) -> tuple[pd.DataFrame, pd.DataFrame]:
+  def load_kr_valuation_data(bronze_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Load Korean DART data for valuation (CFO, CAPEX, SHARES).
 
     DART thstrm_amount is already per-quarter (not YTD), so
@@ -119,13 +175,17 @@ class ValuationPanelBuilder(BasePanelBuilder):
         if df.empty:
           continue
         mapped = df[df['metric'].isin(
-            ['CFO', 'CAPEX', 'SHARES'])].copy()
+            ['CFO', 'CAPEX', 'SHARES',
+             'REVENUE', 'EBIT', 'NET_INCOME',
+             'TOTAL_ASSETS', 'TOTAL_EQUITY',
+             'CURRENT_LIABILITIES', 'CASH'])].copy()
         if mapped.empty:
           continue
 
         mapped['cik10'] = mapped['corp_code'].map(
             corp_to_stock).fillna(mapped['corp_code'])
         mapped = mapped.rename(columns={'bsns_year': 'fy'})
+        mapped['fy'] = mapped['fy'].astype(str)
         mapped['fiscal_year'] = pd.to_numeric(
             mapped['fy'], errors='coerce')
 
@@ -158,6 +218,8 @@ class ValuationPanelBuilder(BasePanelBuilder):
 
     facts = (pd.concat(facts_list, ignore_index=True)
              if facts_list else pd.DataFrame())
+    if not facts.empty:
+      facts['is_ytd'] = False
 
     # For non-Q4 data, DART gives per-quarter values (not YTD).
     # We must NOT apply YTD->Q conversion. Mark CFO/CAPEX as

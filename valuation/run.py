@@ -134,14 +134,20 @@ def run_valuation(
   terminal_result = policies['terminal'].compute()
   all_diag.update({f'terminal_{k}': v for k, v in terminal_result.diag.items()})
 
+  terminal_params = terminal_result.value
+
   if growth_result.diag.get('below_threshold', False):
     logger.debug('%s: Growth below threshold, using 0%% growth path', ticker)
     growth_path = [0.0] * config.n_years
     all_diag['growth_path_override'] = 'zero_growth'
   else:
+    # Determine the terminal growth to fade towards
+    fade_g_terminal = (terminal_params.value
+                       if terminal_params.method == 'gordon' else 0.02)
+
     fade_result = policies['fade'].compute(
         g0=growth_result.value,
-        g_terminal=terminal_result.value,
+        g_terminal=fade_g_terminal,
         n_years=config.n_years,
     )
     all_diag.update({f'fade_{k}': v for k, v in fade_result.diag.items()})
@@ -170,7 +176,8 @@ def run_valuation(
       sh0=sh0,
       buyback_rate=shares_result.value,
       g0=growth_result.value,
-      g_terminal=terminal_result.value,
+      g_terminal=(terminal_params.value
+                  if terminal_params.method == 'gordon' else 0.0),
       growth_path=growth_path,
       n_years=config.n_years,
       discount_rate=discount_result.value,
@@ -181,8 +188,10 @@ def run_valuation(
       sh0=inputs.sh0,
       buyback_rate=inputs.buyback_rate,
       growth_path=inputs.growth_path,
-      g_terminal=inputs.g_terminal,
+      g_terminal=inputs.g_terminal,  # backward compatibility
       discount_rate=inputs.discount_rate,
+      tv_method=terminal_params.method,
+      tv_param=terminal_params.value,
   )
 
   market_slice = None

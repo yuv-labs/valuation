@@ -26,6 +26,9 @@ def main() -> None:
       '--gold-dir', type=Path,
       default=Path('data/gold/out'))
   parser.add_argument(
+      '--bronze-dir', type=Path,
+      default=Path('data/bronze/out'))
+  parser.add_argument(
       '--min-date', type=str, default='2010-01-01')
   parser.add_argument(
       '--no-validate', action='store_true')
@@ -35,6 +38,7 @@ def main() -> None:
       silver_dir=args.silver_dir,
       gold_dir=args.gold_dir,
       min_date=args.min_date,
+      bronze_dir=args.bronze_dir,
   )
   builder.build()
 
