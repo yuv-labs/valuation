@@ -2,6 +2,7 @@
 
 import pandas as pd
 
+from screening.scorers.base import Scorer
 from screening.scorers.composite import CompositeScorer
 from screening.scorers.fear import FearScorer
 from screening.scorers.quality import QualityScorer
@@ -9,6 +10,19 @@ from screening.scorers.quality import QualityScorer
 
 def _make_series(**kwargs):
   return pd.Series(kwargs)
+
+
+class TestScorerInterface:
+
+  def test_fear_scorer_is_scorer(self):
+    assert isinstance(FearScorer(), Scorer)
+
+  def test_quality_scorer_is_scorer(self):
+    assert isinstance(QualityScorer(), Scorer)
+
+  def test_composite_is_not_row_scorer(self):
+    """CompositeScorer is a combiner, not a row-level Scorer."""
+    assert not isinstance(CompositeScorer(), Scorer)
 
 
 class TestFearScorer:
