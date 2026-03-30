@@ -73,6 +73,8 @@ class BasePanelBuilder(ABC):
 
     if markets is None:
       markets = ['us']
+    # Only include markets whose Silver data has been built.
+    # All panel builders require facts; skip if missing.
     self._sources: list[MarketSource] = []
     for market in markets:
       factory = MARKET_SOURCES.get(market)
