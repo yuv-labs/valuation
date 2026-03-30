@@ -102,9 +102,8 @@ def _add_consistency(
   return df
 
 
-def run_screening(  # pylint: disable=unused-argument
+def run_screening(
     gold_dir: Path,
-    bronze_dir: Path | None = None,
     silver_dir: Path | None = None,
     top_n: int = 30,
     min_market_cap_us: float = 2e9,
@@ -200,9 +199,6 @@ def main() -> None:
       '--silver-dir', type=Path,
       default=Path('data/silver/out'))
   parser.add_argument(
-      '--bronze-dir', type=Path,
-      default=Path('data/bronze/out'))
-  parser.add_argument(
       '--output-dir', type=Path,
       default=Path('output'))
   parser.add_argument('--top', type=int, default=50)
@@ -214,7 +210,6 @@ def main() -> None:
 
   run_screening(
       gold_dir=args.gold_dir,
-      bronze_dir=args.bronze_dir,
       silver_dir=args.silver_dir,
       top_n=args.top,
       min_market_cap_us=args.min_mcap_us,

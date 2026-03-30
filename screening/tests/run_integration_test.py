@@ -17,7 +17,6 @@ class TestRunScreening:
         run_screening  # pylint: disable=import-outside-toplevel
     df = run_screening(
         gold_dir=GOLD_DIR,
-        bronze_dir=Path('data/bronze/out'),
         silver_dir=Path('data/silver/out'),
         top_n=10,
         min_market_cap_us=2e9,
@@ -33,7 +32,6 @@ class TestRunScreening:
         run_screening  # pylint: disable=import-outside-toplevel
     df = run_screening(
         gold_dir=GOLD_DIR,
-        bronze_dir=Path('data/bronze/out'),
         silver_dir=Path('data/silver/out'),
         top_n=100,
         min_market_cap_us=2e9,

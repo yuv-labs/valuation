@@ -5,11 +5,10 @@ from pathlib import Path
 import pytest
 
 SILVER_DIR = Path('data/silver/out')
-BRONZE_DIR = Path('data/bronze/out')
-HAS_KR_DATA = (BRONZE_DIR / 'dart' / 'finstate').exists()
+HAS_KR_DATA = (SILVER_DIR / 'dart' / 'facts_long.parquet').exists()
 
 
-@pytest.mark.skipif(not HAS_KR_DATA, reason='No KR data')
+@pytest.mark.skipif(not HAS_KR_DATA, reason='No KR Silver data')
 class TestKRValuationPanel:
 
   def test_kia_has_quarterly_cfo_ttm(self):
@@ -20,7 +19,7 @@ class TestKRValuationPanel:
         silver_dir=SILVER_DIR,
         gold_dir=Path('/tmp/test_kr_dcf'),
         min_date='2022-01-01',
-        bronze_dir=BRONZE_DIR,
+        markets=['us', 'kr'],
     )
     panel = builder.build()
 
@@ -38,7 +37,7 @@ class TestKRValuationPanel:
         silver_dir=SILVER_DIR,
         gold_dir=Path('/tmp/test_kr_dcf2'),
         min_date='2023-01-01',
-        bronze_dir=BRONZE_DIR,
+        markets=['us', 'kr'],
     )
     panel = builder.build()
 
