@@ -3,6 +3,7 @@ Build valuation panel.
 
 Usage:
   python -m data.gold.valuation.build
+  python -m data.gold.valuation.build --markets us kr
   python -m data.gold.valuation.build --no-validate
 """
 
@@ -26,8 +27,10 @@ def main() -> None:
       '--gold-dir', type=Path,
       default=Path('data/gold/out'))
   parser.add_argument(
-      '--bronze-dir', type=Path,
-      default=Path('data/bronze/out'))
+      '--markets', nargs='+',
+      choices=['us', 'kr'],
+      default=['us', 'kr'],
+      help='Markets to include (default: us kr)')
   parser.add_argument(
       '--min-date', type=str, default='2010-01-01')
   parser.add_argument(
@@ -38,7 +41,7 @@ def main() -> None:
       silver_dir=args.silver_dir,
       gold_dir=args.gold_dir,
       min_date=args.min_date,
-      bronze_dir=args.bronze_dir,
+      markets=args.markets,
   )
   builder.build()
 

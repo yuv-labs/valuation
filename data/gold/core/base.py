@@ -8,6 +8,7 @@ and produces a model-ready parquet panel.
 
 from abc import ABC
 from abc import abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -17,6 +18,38 @@ from data.gold.aggregation import build_quarterly_metrics
 from data.gold.config.schemas import PanelSchema
 from data.gold.transforms import join_metrics_by_cfo_filed
 from data.shared.io import ParquetWriter
+
+
+@dataclass
+class MarketSource:
+  """Pointer to Silver layer data for a single market."""
+  companies_path: Path
+  facts_path: Path
+  prices_path: Path
+
+
+def us_source(silver_dir: Path) -> MarketSource:
+  """US market source (SEC + Stooq)."""
+  return MarketSource(
+      companies_path=silver_dir / 'sec' / 'companies.parquet',
+      facts_path=silver_dir / 'sec' / 'facts_long.parquet',
+      prices_path=silver_dir / 'stooq' / 'prices_daily.parquet',
+  )
+
+
+def kr_source(silver_dir: Path) -> MarketSource:
+  """Korean market source (DART + KRX)."""
+  return MarketSource(
+      companies_path=silver_dir / 'dart' / 'companies.parquet',
+      facts_path=silver_dir / 'dart' / 'facts_long.parquet',
+      prices_path=silver_dir / 'krx' / 'prices_daily.parquet',
+  )
+
+
+MARKET_SOURCES = {
+    'us': us_source,
+    'kr': kr_source,
+}
 
 
 class BasePanelBuilder(ABC):
@@ -30,6 +63,7 @@ class BasePanelBuilder(ABC):
       gold_dir: Path,
       schema: PanelSchema,
       min_date: Optional[str] = None,
+      markets: Optional[list[str]] = None,
   ):
     self.silver_dir = Path(silver_dir)
     self.gold_dir = Path(gold_dir)
@@ -37,18 +71,49 @@ class BasePanelBuilder(ABC):
     self.min_date = min_date
     self.panel: Optional[pd.DataFrame] = None
 
+    if markets is None:
+      markets = ['us']
+    self._sources: list[MarketSource] = []
+    for market in markets:
+      factory = MARKET_SOURCES.get(market)
+      if factory:
+        src = factory(self.silver_dir)
+        if src.facts_path.exists():
+          self._sources.append(src)
+
   @abstractmethod
   def build(self) -> pd.DataFrame:
     """Build the panel. Subclasses must implement."""
 
-  def _load_data(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Load required data from Silver layer."""
-    companies = pd.read_parquet(
-        self.silver_dir / 'sec' / 'companies.parquet')
-    facts = pd.read_parquet(
-        self.silver_dir / 'sec' / 'facts_long.parquet')
-    prices = pd.read_parquet(
-        self.silver_dir / 'stooq' / 'prices_daily.parquet')
+  def _load_data(
+      self,
+  ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load data from all configured market sources."""
+    companies_parts: list[pd.DataFrame] = []
+    facts_parts: list[pd.DataFrame] = []
+    prices_parts: list[pd.DataFrame] = []
+
+    for src in self._sources:
+      if src.companies_path.exists():
+        companies_parts.append(
+            pd.read_parquet(src.companies_path))
+      if src.facts_path.exists():
+        df = pd.read_parquet(src.facts_path)
+        # Normalize fy to string for cross-market concat.
+        if 'fy' in df.columns:
+          df['fy'] = df['fy'].astype(str)
+        facts_parts.append(df)
+      if src.prices_path.exists():
+        prices_parts.append(
+            pd.read_parquet(src.prices_path))
+
+    companies = (pd.concat(companies_parts, ignore_index=True)
+                 if companies_parts else pd.DataFrame())
+    facts = (pd.concat(facts_parts, ignore_index=True)
+             if facts_parts else pd.DataFrame())
+    prices = (pd.concat(prices_parts, ignore_index=True)
+              if prices_parts else pd.DataFrame())
+
     return companies, facts, prices
 
   def _build_quarterly_metrics(
@@ -77,15 +142,18 @@ class BasePanelBuilder(ABC):
     self.gold_dir.mkdir(parents=True, exist_ok=True)
     output_path = self.gold_dir / f'{self.schema.name}.parquet'
 
+    input_paths = []
+    for src in self._sources:
+      for p in [src.companies_path, src.facts_path,
+                src.prices_path]:
+        if p.exists():
+          input_paths.append(p)
+
     writer = ParquetWriter()
     writer.write(
         self.panel,
         output_path,
-        inputs=[
-            self.silver_dir / 'sec' / 'companies.parquet',
-            self.silver_dir / 'sec' / 'facts_long.parquet',
-            self.silver_dir / 'stooq' / 'prices_daily.parquet',
-        ],
+        inputs=input_paths,
         metadata={
             'layer': 'gold',
             'dataset': self.schema.name,

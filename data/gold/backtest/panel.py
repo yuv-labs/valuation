@@ -26,35 +26,23 @@ class BacktestPanelBuilder(BasePanelBuilder):
       silver_dir: Path,
       gold_dir: Path,
       min_date: Optional[str] = None,
-      bronze_dir: Optional[Path] = None,
+      markets: Optional[list[str]] = None,
   ):
     super().__init__(
-        silver_dir, gold_dir, BACKTEST_PANEL_SCHEMA, min_date)
-    self._bronze_dir = bronze_dir
+        silver_dir, gold_dir, BACKTEST_PANEL_SCHEMA,
+        min_date, markets)
 
   def build(self) -> pd.DataFrame:
     """Build backtest panel with all PIT versions."""
     companies, facts, prices = self._load_data()
-
-    # Append Korean data if available.
-    if self._bronze_dir is not None:
-      kr_facts, kr_prices = ValuationPanelBuilder.load_kr_valuation_data(
-          self._bronze_dir)
-      if not kr_facts.empty:
-        facts['fy'] = facts['fy'].astype(str)
-        facts = pd.concat([facts, kr_facts], ignore_index=True)
-        kr_companies = kr_facts[['cik10']].drop_duplicates().copy()
-        kr_companies['ticker'] = kr_companies['cik10']
-        companies = pd.concat([companies, kr_companies], ignore_index=True)
-      if not kr_prices.empty:
-        prices = pd.concat([prices, kr_prices], ignore_index=True)
 
     metrics_q = self._build_quarterly_metrics(facts)
     metrics_wide = self._build_wide_metrics(metrics_q)
 
     # Merge additional metrics (revenue, ebit, balance sheet).
     builder = ValuationPanelBuilder(self.silver_dir, self.gold_dir)
-    metrics_wide = builder.merge_extra_metrics(metrics_q, metrics_wide)
+    metrics_wide = builder.merge_extra_metrics(
+        metrics_q, metrics_wide)
 
     metrics_wide = metrics_wide.merge(
         companies[['cik10', 'ticker']],

@@ -30,7 +30,7 @@ def build_panels(
     panels: list[str],
     silver_dir: Path,
     gold_dir: Path,
-    bronze_dir: Path,
+    markets: list[str],
     min_date: str = '2010-01-01',
     validate: bool = True,
 ) -> None:
@@ -41,6 +41,7 @@ def build_panels(
     panels: List of panel names to build
     silver_dir: Path to Silver layer output
     gold_dir: Path to Gold layer output
+    markets: Markets to include (e.g., ['us', 'kr'])
     min_date: Minimum date filter
     validate: Whether to validate after build
   """
@@ -59,7 +60,7 @@ def build_panels(
         silver_dir=silver_dir,
         gold_dir=gold_dir,
         min_date=min_date,
-        bronze_dir=bronze_dir,
+        markets=markets,
     )
 
     panel = builder.build()
@@ -102,10 +103,11 @@ def main() -> None:
       help='Gold layer output directory',
   )
   parser.add_argument(
-      '--bronze-dir',
-      type=Path,
-      default=Path('data/bronze/out'),
-      help='Bronze layer directory (for DART facts)',
+      '--markets',
+      nargs='+',
+      choices=['us', 'kr'],
+      default=['us', 'kr'],
+      help='Markets to include (default: us kr)',
   )
   parser.add_argument(
       '--min-date',
@@ -124,7 +126,7 @@ def main() -> None:
       panels=args.panel,
       silver_dir=args.silver_dir,
       gold_dir=args.gold_dir,
-      bronze_dir=args.bronze_dir,
+      markets=args.markets,
       min_date=args.min_date,
       validate=not args.no_validate,
   )
