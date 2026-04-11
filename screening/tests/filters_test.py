@@ -9,28 +9,8 @@ from screening.filters.opportunity import OpportunityFilter
 
 
 def _make_row(**kwargs):
-  """Create a single-row DataFrame with given columns."""
-  defaults = {
-      'ticker': 'TEST',
-      'pe_ratio': 15.0,
-      'pb_ratio': 2.0,
-      'pct_from_52w_high': -10.0,
-      'fcf_yield': 0.03,
-      'roic': 0.12,
-      'roe': 0.15,
-      'op_margin': 0.20,
-      'gp_margin': 0.40,
-      'gp_margin_std_3y': 0.02,
-      'roic_3y_avg': 0.14,
-      'roic_3y_min': 0.09,
-      'fcf_ni_ratio_3y_avg': 0.9,
-      'pe_avg_5y': 20.0,
-      'revenue_cagr_3y': 0.08,
-      'debt_to_equity': 0.5,
-      'fcf_positive_3y': True,
-  }
-  defaults.update(kwargs)
-  return pd.DataFrame([defaults])
+  """Create a single-row DataFrame. All values must be explicit."""
+  return pd.DataFrame([{'ticker': 'TEST', **kwargs}])
 
 
 def _make_df(rows):

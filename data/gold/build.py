@@ -10,7 +10,7 @@ Usage:
 import argparse
 import logging
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Any
 
 import pandas as pd
 
@@ -20,30 +20,13 @@ from data.gold.valuation.panel import ValuationPanelBuilder
 
 logger = logging.getLogger(__name__)
 
-
-class PanelBuilder(Protocol):
-  """Structural type for concrete panel builders."""
-
-  def __init__(
-      self,
-      silver_dir: Path,
-      gold_dir: Path,
-      min_date: Optional[str] = None,
-      markets: Optional[list[str]] = None,
-  ) -> None: ...
-
-  def build(self) -> pd.DataFrame: ...
-
-  def validate(self) -> list[str]: ...
-
-  def save(self) -> Path: ...
-
-  def summary(self) -> str: ...
-
-
 AVAILABLE_PANELS = ['valuation', 'backtest', 'screening']
 
-PANEL_BUILDERS: dict[str, type[PanelBuilder]] = {
+# type[Any] because concrete builders have different __init__ signatures
+# from their abstract base (BasePanelBuilder requires schema arg,
+# but subclasses hide it). All share (silver_dir, gold_dir, min_date,
+# markets) constructor interface.
+PANEL_BUILDERS: dict[str, type[Any]] = {
     'valuation': ValuationPanelBuilder,
     'backtest': BacktestPanelBuilder,
     'screening': ScreeningPanelBuilder,

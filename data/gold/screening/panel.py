@@ -372,9 +372,12 @@ class ScreeningPanelBuilder(BasePanelBuilder):
         lambda s: s.rolling(5, min_periods=3).mean())
 
     # FCF = CFO - CAPEX
-    fcf_annual = annual.get('cfo_ttm', pd.Series(
-        dtype='float64')) - annual.get('capex_ttm', pd.Series(
-        dtype='float64'))
+    for col in ('cfo_ttm', 'capex_ttm', 'net_income_ttm', 'revenue_ttm'):
+      if col not in annual.columns:
+        raise ValueError(
+            f'Missing required column {col!r} in panel. '
+            'Ensure _compute_ratios ran before _compute_rolling_metrics.')
+    fcf_annual = annual['cfo_ttm'] - annual['capex_ttm']
 
     # FCF positive 3Y: all 3 years positive
     fcf_positive_3y = fcf_annual.groupby('ticker').transform(
@@ -383,8 +386,7 @@ class ScreeningPanelBuilder(BasePanelBuilder):
             raw=True))
 
     # FCF/NI ratio 3Y avg: exclude years where NI <= 0.
-    ni_annual = annual.get('net_income_ttm', pd.Series(
-        dtype='float64'))
+    ni_annual = annual['net_income_ttm']
     fcf_ni_raw = fcf_annual / ni_annual.replace(0, pd.NA)
     # Mask rows where NI <= 0.
     fcf_ni_raw = fcf_ni_raw.where(ni_annual > 0)
@@ -392,8 +394,7 @@ class ScreeningPanelBuilder(BasePanelBuilder):
         lambda s: s.rolling(3, min_periods=2).mean())
 
     # Revenue CAGR 3Y
-    revenue_annual = annual.get('revenue_ttm', pd.Series(
-        dtype='float64'))
+    revenue_annual = annual['revenue_ttm']
     revenue_3y_ago = revenue_annual.groupby('ticker').shift(3)
     revenue_cagr_3y = (
         (revenue_annual / revenue_3y_ago.replace(0, pd.NA))
@@ -458,10 +459,10 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     latest_prices = (
         prices.sort_values('date')
         .groupby('ticker', as_index=False)
-        .tail(1)[['ticker', 'close', '_52w_high']])
+        .tail(1)[['ticker', 'close', '_52w_high']]
+        .rename(columns={'close': '_latest_close'}))
 
-    df = panel.merge(latest_prices, on='ticker', how='left',
-                     suffixes=('', '_price'))
+    df = panel.merge(latest_prices, on='ticker', how='left')
 
     # For the latest period per ticker, compute drawdown.
     latest_end = (
@@ -471,16 +472,16 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     df = df.merge(latest_end, on='ticker', how='left')
 
     is_latest = df['end'] == df['_max_end']
-    high_52w = df.get('_52w_high')
-    close = df.get('close_price', df.get('close'))
 
     df['pct_from_52w_high'] = pd.NA
-    if high_52w is not None and close is not None:
-      drawdown = (close / high_52w.replace(0, pd.NA)) - 1
+    if '_latest_close' in df.columns and '_52w_high' in df.columns:
+      drawdown = (
+          df['_latest_close'] / df['_52w_high'].replace(0, pd.NA)
+      ) - 1
       df.loc[is_latest, 'pct_from_52w_high'] = (
           drawdown[is_latest])
 
     df = df.drop(
-        columns=['_max_end', '_52w_high', 'close_price', 'close'],
+        columns=['_max_end', '_52w_high', '_latest_close'],
         errors='ignore')
     return df

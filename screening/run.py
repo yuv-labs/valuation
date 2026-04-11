@@ -25,6 +25,8 @@ from screening.scorers.moat import MoatScorer
 
 logger = logging.getLogger(__name__)
 
+_NAVER_STOCK_API = 'https://m.stock.naver.com/api/stock/{ticker}/basic'
+
 
 def _load_panel(gold_dir: Path) -> pd.DataFrame:
   path = gold_dir / 'screening_panel.parquet'
@@ -73,7 +75,7 @@ def _resolve_kr_name(
   # Fallback: Naver Finance API
   try:
     import requests  # pylint: disable=import-outside-toplevel
-    url = f'https://m.stock.naver.com/api/stock/{ticker}/basic'
+    url = _NAVER_STOCK_API.format(ticker=ticker)
     resp = requests.get(url, timeout=5)
     if resp.ok:
       resolved = resp.json().get('stockName', ticker)
@@ -128,9 +130,8 @@ def _run_track_b(df: pd.DataFrame) -> pd.DataFrame:
   composite = CompositeScorer()
 
   df['fear_score'] = df.apply(fear.score, axis=1)
-  if 'moat_score' not in df.columns:
-    moat = MoatScorer()
-    df['moat_score'] = df.apply(moat.score, axis=1)
+  assert 'moat_score' in df.columns, (
+      'Track B requires moat_score from Track A')
   df['opportunity_score'] = df.apply(
       lambda r: composite.score(
           r['fear_score'], r['moat_score']),
