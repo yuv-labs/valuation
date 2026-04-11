@@ -26,6 +26,7 @@ dev = [
     "mypy>=1.0",
     "yapf>=0.40",
     "pre-commit>=3.0",
+    "setuptools<81",
 ]
 
 [tool.setuptools.packages.find]

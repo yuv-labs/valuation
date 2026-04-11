@@ -10,19 +10,43 @@ Usage:
 import argparse
 import logging
 from pathlib import Path
+from typing import Optional, Protocol
 
 import pandas as pd
 
 from data.gold.backtest.panel import BacktestPanelBuilder
+from data.gold.screening.panel import ScreeningPanelBuilder
 from data.gold.valuation.panel import ValuationPanelBuilder
 
 logger = logging.getLogger(__name__)
 
-AVAILABLE_PANELS = ['valuation', 'backtest']
 
-PANEL_BUILDERS = {
+class PanelBuilder(Protocol):
+  """Structural type for concrete panel builders."""
+
+  def __init__(
+      self,
+      silver_dir: Path,
+      gold_dir: Path,
+      min_date: Optional[str] = None,
+      markets: Optional[list[str]] = None,
+  ) -> None: ...
+
+  def build(self) -> pd.DataFrame: ...
+
+  def validate(self) -> list[str]: ...
+
+  def save(self) -> Path: ...
+
+  def summary(self) -> str: ...
+
+
+AVAILABLE_PANELS = ['valuation', 'backtest', 'screening']
+
+PANEL_BUILDERS: dict[str, type[PanelBuilder]] = {
     'valuation': ValuationPanelBuilder,
     'backtest': BacktestPanelBuilder,
+    'screening': ScreeningPanelBuilder,
 }
 
 
