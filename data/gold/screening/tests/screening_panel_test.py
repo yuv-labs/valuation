@@ -25,6 +25,22 @@ DERIVED_RATIOS = [
     'gp_margin',
 ]
 
+# Rolling multi-year metrics.
+ROLLING_METRICS = [
+    'roic_3y_avg',
+    'roic_3y_min',
+    'gp_margin_std_3y',
+    'pe_avg_5y',
+    'fcf_positive_3y',
+    'fcf_ni_ratio_3y_avg',
+    'revenue_cagr_3y',
+]
+
+# Price-derived metrics.
+PRICE_METRICS = [
+    'pct_from_52w_high',
+]
+
 # Base metric TTM/point-in-time columns.
 BASE_METRICS = [
     'revenue_ttm',
@@ -112,3 +128,29 @@ class TestScreeningPanelBuilder:
         subset=['ticker', 'end'], keep=False).sum()
     assert dupes == 0, (
         f'{dupes} duplicate (ticker, end) rows')
+
+  def test_has_rolling_metric_columns(self):
+    for col in ROLLING_METRICS:
+      assert col in self.panel.columns, (
+          f'Missing rolling metric column: {col}')
+
+  def test_has_price_metric_columns(self):
+    for col in PRICE_METRICS:
+      assert col in self.panel.columns, (
+          f'Missing price metric column: {col}')
+
+  def test_roic_3y_avg_is_reasonable(self):
+    """Non-null ROIC 3Y avg should be between -1 and +1."""
+    vals = self.panel['roic_3y_avg'].dropna()
+    if len(vals) == 0:
+      pytest.skip('No ROIC 3Y avg data')
+    reasonable = ((vals > -1) & (vals < 1)).sum()
+    assert reasonable > len(vals) * 0.8
+
+  def test_pct_from_52w_high_is_negative_or_zero(self):
+    """Drawdown from 52w high should be <= 0."""
+    vals = self.panel['pct_from_52w_high'].dropna()
+    if len(vals) == 0:
+      pytest.skip('No 52w high data')
+    assert (vals <= 0.001).all(), (
+        'pct_from_52w_high should be <= 0')

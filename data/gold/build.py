@@ -10,19 +10,26 @@ Usage:
 import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
 from data.gold.backtest.panel import BacktestPanelBuilder
+from data.gold.screening.panel import ScreeningPanelBuilder
 from data.gold.valuation.panel import ValuationPanelBuilder
 
 logger = logging.getLogger(__name__)
 
-AVAILABLE_PANELS = ['valuation', 'backtest']
+AVAILABLE_PANELS = ['valuation', 'backtest', 'screening']
 
-PANEL_BUILDERS = {
+# type[Any] because concrete builders have different __init__ signatures
+# from their abstract base (BasePanelBuilder requires schema arg,
+# but subclasses hide it). All share (silver_dir, gold_dir, min_date,
+# markets) constructor interface.
+PANEL_BUILDERS: dict[str, type[Any]] = {
     'valuation': ValuationPanelBuilder,
     'backtest': BacktestPanelBuilder,
+    'screening': ScreeningPanelBuilder,
 }
 
 

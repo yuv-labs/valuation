@@ -14,13 +14,13 @@ class FearScorer(Scorer):
 
     pct = safe_float(row.get('pct_from_52w_high'))
     if pct is not None:
-      if pct <= -40:
+      if pct <= -0.40:
         s += 30
-      elif pct <= -30:
+      elif pct <= -0.30:
         s += 22
-      elif pct <= -20:
+      elif pct <= -0.20:
         s += 15
-      elif pct <= -10:
+      elif pct <= -0.10:
         s += 7
 
     pe = safe_float(row.get('pe_ratio'))
