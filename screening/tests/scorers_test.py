@@ -29,7 +29,7 @@ class TestFearScorer:
 
   def test_returns_float_between_0_and_100(self):
     row = _make_series(
-        pct_from_52w_high=-30.0,
+        pct_from_52w_high=-0.30,
         pe_ratio=8.0,
         pe_avg_5y=20.0,
         fcf_yield=0.08,
@@ -40,7 +40,7 @@ class TestFearScorer:
 
   def test_high_fear_for_crashed_stock(self):
     row = _make_series(
-        pct_from_52w_high=-50.0,
+        pct_from_52w_high=-0.50,
         pe_ratio=5.0,
         pe_avg_5y=25.0,
         fcf_yield=0.12,
@@ -49,7 +49,7 @@ class TestFearScorer:
 
   def test_low_fear_for_normal_stock(self):
     row = _make_series(
-        pct_from_52w_high=-5.0,
+        pct_from_52w_high=-0.05,
         pe_ratio=20.0,
         pe_avg_5y=22.0,
         fcf_yield=0.02,

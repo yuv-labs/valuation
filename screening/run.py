@@ -2,9 +2,8 @@
 Run stock screening pipeline.
 
 Usage:
-  python -m screening.run                          # Full (Track A → B)
+  python -m screening.run                          # Track A → B (default)
   python -m screening.run --track moat             # Track A only
-  python -m screening.run --track opportunity      # Track B only
   python -m screening.run --top 30 --min-mcap-kr 1e12
 """
 
@@ -126,11 +125,11 @@ def _run_track_b(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
   fear = FearScorer()
-  moat = MoatScorer()
   composite = CompositeScorer()
 
   df['fear_score'] = df.apply(fear.score, axis=1)
   if 'moat_score' not in df.columns:
+    moat = MoatScorer()
     df['moat_score'] = df.apply(moat.score, axis=1)
   df['opportunity_score'] = df.apply(
       lambda r: composite.score(
@@ -162,11 +161,7 @@ def run_screening(
   if track == Track.MOAT:
     df = _run_track_a(df)
     sort_col = 'moat_score'
-  elif track == Track.OPPORTUNITY:
-    df = _run_track_a(df)
-    df = _run_track_b(df)
-    sort_col = 'opportunity_score'
-  else:  # Track.FULL
+  else:  # Track.FULL: Track A → Track B
     df = _run_track_a(df)
     df = _run_track_b(df)
     sort_col = 'opportunity_score'

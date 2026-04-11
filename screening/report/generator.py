@@ -1,6 +1,7 @@
 """Screening report output — table and HTML."""
 
 from datetime import datetime
+from html import escape as html_escape
 from pathlib import Path
 from typing import Any
 
@@ -161,9 +162,9 @@ def generate_html(df: pd.DataFrame, path: Path) -> None:
             f'<td><span class="tag {tag_cls}">'
             f'{mkt}</span></td>')
       elif key == 'ticker':
-        html += f'<td><b>{val}</b></td>'
+        html += f'<td><b>{html_escape(str(val))}</b></td>'
       elif key == 'name':
-        html += f'<td>{str(val)[:30]}</td>'
+        html += f'<td>{html_escape(str(val)[:30])}</td>'
       else:
         html += f'<td>{_format_val(val, fmt)}</td>'
 
