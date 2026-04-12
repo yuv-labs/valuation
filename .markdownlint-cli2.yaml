@@ -1,3 +1,5 @@
 ignores:
   - "knowledge/**"
   - "venv/**"
+config:
+  line-length: false
