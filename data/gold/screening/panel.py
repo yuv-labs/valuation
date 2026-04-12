@@ -111,8 +111,14 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     panel = panel.groupby(
         ['ticker', 'end'], as_index=False).tail(1)
 
-    self.panel = panel.sort_values(
+    panel = panel.sort_values(
         ['ticker', 'end']).reset_index(drop=True)
+
+    # Rolling metrics require deduplicated, sorted history.
+    panel = self._compute_rolling_metrics(panel)
+    panel = self._compute_price_metrics(panel, prices)
+
+    self.panel = panel
     return self.panel
 
 
@@ -326,4 +332,156 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     else:
       df['gp_margin'] = pd.NA
 
+    return df
+
+  @staticmethod
+  def _compute_rolling_metrics(
+      panel: pd.DataFrame,
+  ) -> pd.DataFrame:
+    """Compute rolling multi-year metrics per ticker.
+
+    Requires panel sorted by (ticker, end) with single-period
+    ratios already computed.
+    """
+    df = panel.copy()
+    df['_year'] = df['end'].dt.year
+
+    # Take last row per (ticker, year) for annual snapshots.
+    annual = (
+        df.sort_values('end')
+        .groupby(['ticker', '_year'], as_index=False)
+        .tail(1)
+        .set_index(['ticker', '_year'])
+    )
+
+    # --- Per-ticker annual rolling stats ---
+    grouped = annual.groupby('ticker')
+
+    # ROIC 3Y: avg and min
+    roic_3y_avg = grouped['roic'].transform(
+        lambda s: s.rolling(3, min_periods=3).mean())
+    roic_3y_min = grouped['roic'].transform(
+        lambda s: s.rolling(3, min_periods=3).min())
+
+    # Gross margin std 3Y
+    gp_margin_std_3y = grouped['gp_margin'].transform(
+        lambda s: s.rolling(3, min_periods=3).std())
+
+    # PE avg 5Y (min 3 years if insufficient history)
+    pe_avg_5y = grouped['pe_ratio'].transform(
+        lambda s: s.rolling(5, min_periods=3).mean())
+
+    # FCF = CFO - CAPEX
+    for col in ('cfo_ttm', 'capex_ttm', 'net_income_ttm', 'revenue_ttm'):
+      if col not in annual.columns:
+        raise ValueError(
+            f'Missing required column {col!r} in panel. '
+            'Ensure _compute_ratios ran before _compute_rolling_metrics.')
+    fcf_annual = annual['cfo_ttm'] - annual['capex_ttm']
+
+    # FCF positive 3Y: all 3 years positive
+    fcf_positive_3y = fcf_annual.groupby('ticker').transform(
+        lambda s: s.rolling(3, min_periods=3).apply(
+            lambda w: float(all(v > 0 for v in w)),
+            raw=True))
+
+    # FCF/NI ratio 3Y avg: exclude years where NI <= 0.
+    ni_annual = annual['net_income_ttm']
+    fcf_ni_raw = fcf_annual / ni_annual.replace(0, pd.NA)
+    # Mask rows where NI <= 0.
+    fcf_ni_raw = fcf_ni_raw.where(ni_annual > 0)
+    fcf_ni_ratio_3y_avg = fcf_ni_raw.groupby('ticker').transform(
+        lambda s: s.rolling(3, min_periods=2).mean())
+
+    # Revenue CAGR 3Y
+    revenue_annual = annual['revenue_ttm']
+    revenue_3y_ago = revenue_annual.groupby('ticker').shift(3)
+    revenue_cagr_3y = (
+        (revenue_annual / revenue_3y_ago.replace(0, pd.NA))
+        ** (1 / 3) - 1)
+
+    # Assign back to annual index.
+    annual['roic_3y_avg'] = roic_3y_avg
+    annual['roic_3y_min'] = roic_3y_min
+    annual['gp_margin_std_3y'] = gp_margin_std_3y
+    annual['pe_avg_5y'] = pe_avg_5y
+    annual['fcf_positive_3y'] = fcf_positive_3y.astype('boolean')
+    annual['fcf_ni_ratio_3y_avg'] = fcf_ni_ratio_3y_avg
+    annual['revenue_cagr_3y'] = revenue_cagr_3y
+
+    # Map annual rolling metrics back to all panel rows.
+    rolling_cols = [
+        'roic_3y_avg', 'roic_3y_min', 'gp_margin_std_3y',
+        'pe_avg_5y', 'fcf_positive_3y', 'fcf_ni_ratio_3y_avg',
+        'revenue_cagr_3y',
+    ]
+    rolling_lookup = annual[rolling_cols].reset_index()
+    df = df.merge(
+        rolling_lookup, on=['ticker', '_year'], how='left')
+    df = df.drop(columns=['_year'])
+
+    return df
+
+  @staticmethod
+  def _compute_price_metrics(
+      panel: pd.DataFrame,
+      prices: pd.DataFrame,
+  ) -> pd.DataFrame:
+    """Compute 52-week high drawdown from price history."""
+    if panel.empty or prices.empty:
+      panel['pct_from_52w_high'] = pd.NA
+      return panel
+
+    prices = prices.copy()
+    prices['date'] = pd.to_datetime(prices['date'])
+
+    # Normalize ticker column.
+    if 'symbol' in prices.columns:
+      prices = prices.rename(columns={'symbol': 'ticker'})
+    if 'ticker' in prices.columns:
+      prices['ticker'] = (
+          prices['ticker'].str.replace('.US', '', regex=False))
+
+    # Use 'high' if available, otherwise 'close'.
+    if 'high' in prices.columns:
+      prices['_high'] = prices['high']
+    else:
+      prices['_high'] = prices['close']
+    prices = prices[['ticker', 'date', 'close', '_high']].copy()
+    prices = prices.sort_values(['ticker', 'date'])
+
+    # 52-week (252 trading day) rolling max.
+    prices['_52w_high'] = (
+        prices.groupby('ticker')['_high']
+        .transform(lambda s: s.rolling(252, min_periods=60).max()))
+
+    # Latest price and 52w high per ticker.
+    latest_prices = (
+        prices.sort_values('date')
+        .groupby('ticker', as_index=False)
+        .tail(1)[['ticker', 'close', '_52w_high']]
+        .rename(columns={'close': '_latest_close'}))
+
+    df = panel.merge(latest_prices, on='ticker', how='left')
+
+    # For the latest period per ticker, compute drawdown.
+    latest_end = (
+        df.groupby('ticker')['end']
+        .max().reset_index()
+        .rename(columns={'end': '_max_end'}))
+    df = df.merge(latest_end, on='ticker', how='left')
+
+    is_latest = df['end'] == df['_max_end']
+
+    df['pct_from_52w_high'] = pd.NA
+    if '_latest_close' in df.columns and '_52w_high' in df.columns:
+      drawdown = (
+          df['_latest_close'] / df['_52w_high'].replace(0, pd.NA)
+      ) - 1
+      df.loc[is_latest, 'pct_from_52w_high'] = (
+          drawdown[is_latest])
+
+    df = df.drop(
+        columns=['_max_end', '_52w_high', '_latest_close'],
+        errors='ignore')
     return df

@@ -1,67 +1,80 @@
 """Screening report output — table and HTML."""
 
 from datetime import datetime
+from html import escape as html_escape
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 from tabulate import tabulate  # type: ignore[import-untyped]
 
-_TABLE_COLS = [
-    ('market', 'Mkt'),
-    ('ticker', 'Ticker'),
-    ('name', 'Company'),
-    ('pe_ratio', 'PE'),
-    ('pb_ratio', 'PB'),
-    ('roe', 'ROE'),
-    ('roe_3y_avg', '3Y Avg'),
-    ('roic', 'ROIC'),
-    ('roic_3y_avg', '3Y Avg'),
-    ('fcf_yield', 'FCF Yld'),
-    ('op_margin', 'OpMgn'),
-    ('debt_to_equity', 'D/E'),
-    ('opportunity_score', 'Opp'),
+# (column_key, short_label, format, tooltip)
+# format: 'pct' = percentage, 'num' = number, 'str' = string
+_ALL_COLS = [
+    ('market', 'Mkt', 'str', ''),
+    ('ticker', 'Ticker', 'str', ''),
+    ('name', 'Company', 'name', ''),
+    ('pe_ratio', 'PE', 'num',
+     'PE Ratio = 시가총액 / 순이익(TTM)'),
+    ('roic_3y_avg', 'ROIC 3Y', 'pct',
+     'ROIC 3년 평균. Tier 1 기준: > 10%'),
+    ('roic_3y_min', 'ROIC Min', 'pct',
+     'ROIC 3년 최솟값. Tier 1 기준: > 7%. 나쁜 해에도 자본비용 이상'),
+    ('fcf_ni_ratio_3y_avg', 'FCF/NI 3Y', 'pct',
+     'FCF/순이익 3년 평균. Tier 1 기준: > 0.8. 이익의 질(오너 어닝)'),
+    ('gp_margin', 'GPM', 'pct',
+     '매출총이익률. Tier 2 기준: > 30%. 가격결정력 증거'),
+    ('gp_margin_std_3y', 'GPM Std', 'pct',
+     '매출총이익률 3년 표준편차. Tier 2 기준: < 5%. 마진 안정성'),
+    ('debt_to_equity', 'D/E', 'num',
+     '부채비율 = 총부채/자기자본. Tier 2 기준: < 1.0'),
+    ('fcf_yield', 'FCF Yld', 'pct',
+     'FCF 수익률 = (영업CF − Capex) / 시가총액. Track B 기준: > 5%'),
+    ('revenue_cagr_3y', 'Rev CAGR', 'pct',
+     '매출 3년 CAGR. 참고 지표 (필터/스코어 미반영)'),
+    ('moat_score', 'Moat', 'num',
+     '해자 점수 (0-100). ROIC, FCF/NI, GPM, D/E 기반'),
+    ('fear_score', 'Fear', 'num',
+     '공포 점수 (0-100). 52주 고가 대비 하락률, PE vs 5Y 평균, FCF yield'),
+    ('opportunity_score', 'Opp', 'num',
+     '기회 점수 (0-100). 70% 공포(가격 매력도) + 30% 해자'),
 ]
 
 
-def _fp(val: Any) -> str:
-  try:
-    if val is None or pd.isna(val):
-      return '-'
-    return f'{float(val) * 100:.1f}%'
-  except (TypeError, ValueError):
-    return '-'
+def _visible_cols(df: pd.DataFrame) -> list[tuple]:
+  """Return only columns that exist in the DataFrame."""
+  return [c for c in _ALL_COLS if c[0] in df.columns]
 
 
-def _fn(val: Any) -> str:
-  try:
-    if val is None or pd.isna(val):
+def _format_val(val: Any, fmt: str) -> str:
+  if fmt == 'pct':
+    try:
+      if val is None or pd.isna(val):
+        return '-'
+      return f'{float(val) * 100:.1f}%'
+    except (TypeError, ValueError):
       return '-'
-    return f'{float(val):.1f}'
-  except (TypeError, ValueError):
-    return '-'
+  if fmt == 'num':
+    try:
+      if val is None or pd.isna(val):
+        return '-'
+      return f'{float(val):.1f}'
+    except (TypeError, ValueError):
+      return '-'
+  if fmt == 'name':
+    return str(val)[:25] if val else '-'
+  return str(val) if val else '-'
 
 
 def print_table(df: pd.DataFrame) -> None:
   """Print screening results as a console table."""
+  cols = _visible_cols(df)
   rows = []
   for _, r in df.iterrows():
-    row = []
-    for col, _ in _TABLE_COLS:
-      v = r.get(col)
-      if col in ('roe', 'roe_3y_avg', 'roic', 'roic_3y_avg',
-                  'fcf_yield', 'op_margin'):
-        row.append(_fp(v))
-      elif col in ('pe_ratio', 'pb_ratio', 'debt_to_equity',
-                    'opportunity_score'):
-        row.append(_fn(v))
-      elif col == 'name':
-        row.append(str(v)[:25] if v else '-')
-      else:
-        row.append(str(v) if v else '-')
-    rows.append(row)
+    rows.append([_format_val(r.get(key), fmt)
+                 for key, _, fmt, _ in cols])
 
-  headers = [h for _, h in _TABLE_COLS]
+  headers = [label for _, label, _, _ in cols]
   sep = '=' * 70
   print(f'\n{sep}')
   print(f'  Screening Results — {len(df)} stocks')
@@ -70,24 +83,14 @@ def print_table(df: pd.DataFrame) -> None:
                  tablefmt='simple', stralign='right'))
 
 
-def _badge(roe_c: Any, roic_c: Any) -> str:
-  rc = bool(roe_c) if roe_c is not None and roe_c is not pd.NA else False
-  ic = bool(roic_c) if roic_c is not None and roic_c is not pd.NA else False
-  if rc and ic:
-    return '<span class="badge both">Both</span>'
-  if rc:
-    return '<span class="badge partial">ROE</span>'
-  if ic:
-    return '<span class="badge partial">ROIC</span>'
-  return '<span class="badge none">-</span>'
-
-
 # pylint: disable=too-many-locals
 def generate_html(df: pd.DataFrame, path: Path) -> None:
   """Generate interactive HTML screening report."""
   today = datetime.now().strftime('%Y-%m-%d')
   us_n = len(df[df['market'] == 'US'])
   kr_n = len(df[df['market'] == 'KR'])
+
+  cols = _visible_cols(df)
 
   css = '''
   * { box-sizing: border-box; }
@@ -100,6 +103,8 @@ def generate_html(df: pd.DataFrame, path: Path) -> None:
           overflow: hidden; font-size: 0.85em; }
   th { background: #1a1a2e; color: white; padding: 8px 10px;
        text-align: right; white-space: nowrap; position: sticky; top: 0; }
+  th[title] { cursor: help; text-decoration: underline dotted rgba(255,255,255,0.5);
+              text-underline-offset: 3px; }
   th:nth-child(-n+3) { text-align: left; }
   td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0;
        text-align: right; white-space: nowrap; }
@@ -113,21 +118,9 @@ def generate_html(df: pd.DataFrame, path: Path) -> None:
          font-size: 0.75em; font-weight: 600; }
   .tag-us { background: #e3f2fd; color: #1565c0; }
   .tag-kr { background: #fff3e0; color: #e65100; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px;
-           font-size: 0.8em; font-weight: 500; }
-  .both { background: #e8f5e9; color: #2e7d32; }
-  .partial { background: #fff8e1; color: #f57f17; }
-  .none { background: #f5f5f5; color: #999; }
   .section { background: #f5f5f5; }
   .section td { font-weight: 700; padding: 10px; font-size: 0.95em; }
   '''
-
-  header_cols = [
-      'Mkt', 'Ticker', 'Company', 'PE', 'PB',
-      'ROE', '3Y Avg', '3Y Min',
-      'ROIC', '3Y Avg', '3Y Min',
-      'FCF Yld', 'OpMgn', 'D/E', 'Opp', 'Consistent?',
-  ]
 
   html = (
       f'<!DOCTYPE html>\n<html><head><meta charset="utf-8">\n'
@@ -139,48 +132,42 @@ def generate_html(df: pd.DataFrame, path: Path) -> None:
       f'(US {us_n}, KR {kr_n})</p>\n'
       f'<table><thead><tr>')
 
-  for col in header_cols:
-    html += f'<th>{col}</th>'
+  for _, label, _, tooltip in cols:
+    if tooltip:
+      html += f'<th title="{tooltip}">{label}</th>'
+    else:
+      html += f'<th>{label}</th>'
   html += '</tr></thead><tbody>'
 
+  ncols = len(cols)
   prev_mkt = None
-  ncols = len(header_cols)
   for _, r in df.iterrows():
     mkt = r.get('market', '')
     if mkt != prev_mkt:
-      label = ('Korea (KOSPI)' if mkt == 'KR'
-               else 'United States')
+      section = ('Korea (KOSPI)' if mkt == 'KR'
+                 else 'United States')
       html += (
           f'<tr class="section">'
-          f'<td colspan="{ncols}">{label}</td></tr>')
+          f'<td colspan="{ncols}">{section}</td></tr>')
       prev_mkt = mkt
 
     cls = 'kr' if mkt == 'KR' else ''
-    tag_cls = f'tag-{mkt.lower()}'
-    tag = f'<span class="tag {tag_cls}">{mkt}</span>'
-    name = str(r.get('name', ''))[:30]
-    ticker = r['ticker']
-
-    roe_c = r.get('roe_3y_consistent')
-    roic_c = r.get('roic_3y_consistent')
-
     html += f'<tr class="{cls}">'
-    html += f'<td>{tag}</td>'
-    html += f'<td><b>{ticker}</b></td>'
-    html += f'<td>{name}</td>'
-    vals = [
-        _fn(r.get('pe_ratio')), _fn(r.get('pb_ratio')),
-        _fp(r.get('roe')), _fp(r.get('roe_3y_avg')),
-        _fp(r.get('roe_3y_min')),
-        _fp(r.get('roic')), _fp(r.get('roic_3y_avg')),
-        _fp(r.get('roic_3y_min')),
-        _fp(r.get('fcf_yield')), _fp(r.get('op_margin')),
-        _fn(r.get('debt_to_equity')),
-        _fn(r.get('opportunity_score')),
-        _badge(roe_c, roic_c),
-    ]
-    for v in vals:
-      html += f'<td>{v}</td>'
+
+    for key, _, fmt, _ in cols:
+      val = r.get(key)
+      if key == 'market':
+        tag_cls = f'tag-{mkt.lower()}'
+        html += (
+            f'<td><span class="tag {tag_cls}">'
+            f'{mkt}</span></td>')
+      elif key == 'ticker':
+        html += f'<td><b>{html_escape(str(val))}</b></td>'
+      elif key == 'name':
+        html += f'<td>{html_escape(str(val)[:30])}</td>'
+      else:
+        html += f'<td>{_format_val(val, fmt)}</td>'
+
     html += '</tr>'
 
   html += '</tbody></table></body></html>'
