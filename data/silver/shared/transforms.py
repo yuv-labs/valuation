@@ -1,6 +1,7 @@
 """
 Shared transformation utilities.
 """
+from calendar import monthrange
 from datetime import date
 
 import pandas as pd
@@ -12,11 +13,12 @@ _REFERENCE_YEAR = 2001
 def _day_of_year(month: int, day: int) -> int:
   """Get day of year (1-366) for given month/day using a reference year."""
   # Clamp day to valid range for the month
-  try:
-    return date(_REFERENCE_YEAR, month, min(day, 28)).timetuple().tm_yday
-  except ValueError:
-    # Invalid date, use month end
-    return date(_REFERENCE_YEAR, month, 28).timetuple().tm_yday
+  # Use actual days in month for clamping
+  days_in_month = monthrange(_REFERENCE_YEAR, month)[1]
+  # monthrange raises IllegalMonthError (ValueError) if month is invalid
+
+  return date(_REFERENCE_YEAR, month, min(day,
+                                          days_in_month)).timetuple().tm_yday
 
 
 class TTMCalculator:
