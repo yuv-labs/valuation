@@ -41,7 +41,8 @@ class TestKRValuationPanel:
     )
     panel = builder.build()
 
-    kr = panel[panel['ticker'].apply(
-        lambda t: str(t).isdigit())]
+    from shared.ticker import \
+        is_kr_ticker  # pylint: disable=import-outside-toplevel
+    kr = panel[panel['ticker'].apply(is_kr_ticker)]
     n_kr = kr['ticker'].nunique()
     assert n_kr >= 3, f'Expected 3+ KR tickers, got {n_kr}'

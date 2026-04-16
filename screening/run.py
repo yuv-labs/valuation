@@ -22,6 +22,7 @@ from screening.report.generator import print_table
 from screening.scorers.composite import CompositeScorer
 from screening.scorers.fear import FearScorer
 from screening.scorers.moat import MoatScorer
+from shared.ticker import is_kr_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ def _resolve_kr_name(
   """Resolve Korean ticker name via pykrx, falling back to Naver API."""
   if ticker in name_map:
     return name_map[ticker]
-  if not str(ticker).isdigit():
+  if not is_kr_ticker(ticker):
     return ticker
 
   # Primary: pykrx
@@ -94,7 +95,7 @@ def _filter_market_cap(
 ) -> pd.DataFrame:
   """Apply market-specific minimum market cap thresholds."""
   df['market'] = df['ticker'].apply(
-      lambda t: 'KR' if str(t).isdigit() else 'US')
+      lambda t: 'KR' if is_kr_ticker(t) else 'US')
   us_mask = (df['market'] == 'US') & (
       df['market_cap'].fillna(0) >= min_market_cap_us)
   kr_mask = (df['market'] == 'KR') & (
