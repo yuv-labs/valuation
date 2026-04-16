@@ -522,7 +522,7 @@ Examples:
                       help='Path to Silver directory')
   parser.add_argument('--market',
                       type=str,
-                      choices=['us', 'kr'],
+                      choices=['us', 'kr', 'jp'],
                       default='us',
                       help='Market (us or kr)')
   parser.add_argument('--month-interval',

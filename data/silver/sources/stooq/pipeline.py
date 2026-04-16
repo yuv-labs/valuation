@@ -83,6 +83,7 @@ class StooqPipeline(Pipeline):
 
     metadata = {'layer': 'silver', 'source': 'stooq', 'dataset': 'prices_daily'}
 
+    prices['market'] = 'us'
     csv_files = self._get_csv_files()
     self.writer.write(prices, output_path, inputs=csv_files, metadata=metadata)
 

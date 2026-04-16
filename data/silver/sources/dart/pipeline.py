@@ -70,11 +70,13 @@ class DARTPipeline(Pipeline):
 
     facts = self.datasets.get('facts_long', pd.DataFrame())
     if not facts.empty:
+      facts['market'] = 'kr'
       facts.to_parquet(out_dir / 'facts_long.parquet', index=False)
       logger.info('DART facts_long: %d rows', len(facts))
 
     companies = self.datasets.get('companies', pd.DataFrame())
     if not companies.empty:
+      companies['market'] = 'kr'
       companies.to_parquet(out_dir / 'companies.parquet', index=False)
       logger.info('DART companies: %d rows', len(companies))
 

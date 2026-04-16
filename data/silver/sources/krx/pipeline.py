@@ -146,6 +146,7 @@ class KRXPipeline(Pipeline):
     out_dir = self.context.silver_dir / 'krx'
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / 'prices_daily.parquet'
+    prices['market'] = 'kr'
     prices.to_parquet(out_path, index=False)
 
     logger.info(

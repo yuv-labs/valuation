@@ -41,7 +41,7 @@ def main() -> None:
   parser.add_argument(
       '--markets',
       nargs='+',
-      choices=['us', 'kr'],
+      choices=['us', 'kr', 'jp'],
       default=['us'],
       help='Markets to build (default: us)')
   parser.add_argument(

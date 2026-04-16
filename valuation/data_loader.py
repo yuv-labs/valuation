@@ -89,20 +89,17 @@ class ValuationDataLoader:
     if self._prices is not None:
       return self._prices
 
-    prices_path = self.silver_dir / 'stooq' / 'prices_daily.parquet'
-    if not prices_path.exists():
-      raise FileNotFoundError(f'Price data not found: {prices_path}')
+    parts: list[pd.DataFrame] = []
+    for price_path in sorted(self.silver_dir.glob('*/prices_daily.parquet')):
+      df = pd.read_parquet(price_path)
+      df['date'] = pd.to_datetime(df['date'])
+      parts.append(df)
 
-    prices = pd.read_parquet(prices_path)
-    prices['date'] = pd.to_datetime(prices['date'])
+    if not parts:
+      raise FileNotFoundError(
+          f'No price data found in {self.silver_dir}/*/prices_daily.parquet')
 
-    # Append KRX prices if available.
-    krx_path = self.silver_dir / 'krx' / 'prices_daily.parquet'
-    if krx_path.exists():
-      krx = pd.read_parquet(krx_path)
-      krx['date'] = pd.to_datetime(krx['date'])
-      prices = pd.concat([prices, krx], ignore_index=True)
-
+    prices = pd.concat(parts, ignore_index=True)
     self._prices = prices
     return prices
 

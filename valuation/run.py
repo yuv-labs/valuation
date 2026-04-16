@@ -37,6 +37,12 @@ from valuation.scenarios.registry import create_policies
 
 logger = logging.getLogger(__name__)
 
+PRICE_SUFFIX: dict[str, str] = {
+    'us': '.US',
+    'kr': '',
+    'jp': '.JP',
+}
+
 
 def get_price_after_filing(
     ticker: str,
@@ -58,7 +64,7 @@ def get_price_after_filing(
   """
   prices = loader.load_prices()
 
-  symbol = ticker if market == 'kr' else f'{ticker}.US'
+  symbol = f"{ticker}{PRICE_SUFFIX.get(market, '')}"
   ticker_prices = prices[prices['symbol'] == symbol].copy()
 
   if ticker_prices.empty:
@@ -254,7 +260,7 @@ def main() -> None:
   parser.add_argument(
       '--market',
       type=str,
-      choices=['us', 'kr'],
+      choices=['us', 'kr', 'jp'],
       default='us',
       help='Market (us or kr)',
   )

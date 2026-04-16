@@ -92,15 +92,28 @@ def _filter_market_cap(
     df: pd.DataFrame,
     min_market_cap_us: float,
     min_market_cap_kr: float,
+    min_market_cap_jp: float = 5e11,
+    min_market_cap_cn: float = 5e10,
+    min_market_cap_eu: float = 5e9,
 ) -> pd.DataFrame:
   """Apply market-specific minimum market cap thresholds."""
-  df['market'] = df['ticker'].apply(
-      lambda t: 'KR' if is_kr_ticker(t) else 'US')
-  us_mask = (df['market'] == 'US') & (
-      df['market_cap'].fillna(0) >= min_market_cap_us)
-  kr_mask = (df['market'] == 'KR') & (
-      df['market_cap'].fillna(0) >= min_market_cap_kr)
-  return df[us_mask | kr_mask].copy()
+  if 'market' not in df.columns:
+    df['market'] = df['ticker'].apply(
+        lambda t: 'KR' if is_kr_ticker(t) else 'US')
+  df['market'] = df['market'].str.upper()
+
+  thresholds = {
+      'US': min_market_cap_us,
+      'KR': min_market_cap_kr,
+      'JP': min_market_cap_jp,
+      'CN': min_market_cap_cn,
+      'EU': min_market_cap_eu,
+  }
+  cap = df['market_cap'].fillna(0)
+  mask = pd.Series(False, index=df.index)
+  for market, threshold in thresholds.items():
+    mask = mask | ((df['market'] == market) & (cap >= threshold))
+  return df[mask].copy()
 
 
 def _run_track_a(df: pd.DataFrame) -> pd.DataFrame:
@@ -147,7 +160,12 @@ def run_screening(
     track: Track = Track.FULL,
     top_n: int = 30,
     min_market_cap_us: float = 2e9,
+<<<<<<< HEAD
     min_market_cap_kr: float = 3e11,
+=======
+    min_market_cap_kr: float = 5e11,
+    min_market_cap_jp: float = 5e11,
+>>>>>>> 35d049a (feat: add market column and generalize multi-market infrastructure)
     output_dir: Path | None = None,
 ) -> pd.DataFrame:
   """Run the screening pipeline. Returns ranked DataFrame."""
@@ -157,7 +175,8 @@ def run_screening(
   logger.info('Loaded %d tickers', len(latest))
 
   df = latest.copy()
-  df = _filter_market_cap(df, min_market_cap_us, min_market_cap_kr)
+  df = _filter_market_cap(df, min_market_cap_us, min_market_cap_kr,
+                          min_market_cap_jp=min_market_cap_jp)
   logger.info('After market cap filter: %d', len(df))
 
   if track == Track.MOAT:
@@ -224,7 +243,13 @@ def main() -> None:
   parser.add_argument(
       '--min-mcap-us', type=float, default=2e9)
   parser.add_argument(
+<<<<<<< HEAD
       '--min-mcap-kr', type=float, default=3e11)
+=======
+      '--min-mcap-kr', type=float, default=5e11)
+  parser.add_argument(
+      '--min-mcap-jp', type=float, default=5e11)
+>>>>>>> 35d049a (feat: add market column and generalize multi-market infrastructure)
   args = parser.parse_args()
 
   run_screening(
@@ -234,6 +259,7 @@ def main() -> None:
       top_n=args.top,
       min_market_cap_us=args.min_mcap_us,
       min_market_cap_kr=args.min_mcap_kr,
+      min_market_cap_jp=args.min_mcap_jp,
       output_dir=args.output_dir,
   )
 
