@@ -32,27 +32,25 @@ pip install -e ".[dev]"
 ### Stock Screening (US + Korea)
 
 ```bash
-# 1. Ingest US data (SEC + Stooq prices)
-python -m data.bronze.update --tickers-file data/snp500.txt \
+# 1. US prices: download Stooq dump from stooq.com/db/h/
+#    (Historical Data → U.S. Daily ASCII)
+python -m data.bronze.ingest_stooq_dump \
+  --zip ~/Downloads/d_us_txt.zip \
+  --tickers-file example/tickers/russell1000.txt
+
+# 2. US financials: SEC EDGAR
+python -m data.bronze.update \
+  --tickers-file example/tickers/russell1000.txt \
   --sec-user-agent "your_name research (your@email.com)"
 
-# 2. Build Silver + Gold screening panel
+# 3. Build Silver → Gold → Screen
 python -m data.silver.build --markets us
-python -c "
-from pathlib import Path
-from data.gold.screening.panel import ScreeningPanelBuilder
-builder = ScreeningPanelBuilder(
-    silver_dir=Path('data/silver/out'),
-    gold_dir=Path('data/gold/out'),
-    bronze_dir=Path('data/bronze/out'),  # includes KR data
-)
-builder.build()
-builder.save()
-"
-
-# 3. Run screening
-python -m screening.run --top 25
+python -m data.gold.build --panel screening --min-date 2019-01-01
+python -m screening.run --track moat --top 50
 ```
+
+See [data/readme.md](data/readme.md) for KR data and full refresh
+runbook.
 
 ### DCF Valuation (US)
 
