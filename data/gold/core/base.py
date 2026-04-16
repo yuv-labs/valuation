@@ -46,9 +46,19 @@ def kr_source(silver_dir: Path) -> MarketSource:
   )
 
 
+def jp_source(silver_dir: Path) -> MarketSource:
+  """Japanese market source (EDINET + Stooq JP)."""
+  return MarketSource(
+      companies_path=silver_dir / 'edinet' / 'companies.parquet',
+      facts_path=silver_dir / 'edinet' / 'facts_long.parquet',
+      prices_path=silver_dir / 'stooq_jp' / 'prices_daily.parquet',
+  )
+
+
 MARKET_SOURCES = {
     'us': us_source,
     'kr': kr_source,
+    'jp': jp_source,
 }
 
 

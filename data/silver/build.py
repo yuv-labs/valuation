@@ -13,9 +13,11 @@ from typing import Any
 
 from data.silver.core.pipeline import PipelineContext
 from data.silver.sources.dart.pipeline import DARTPipeline
+from data.silver.sources.edinet.pipeline import EDINETPipeline
 from data.silver.sources.krx.pipeline import KRXPipeline
 from data.silver.sources.sec.pipeline import SECPipeline
 from data.silver.sources.stooq.pipeline import StooqPipeline
+from data.silver.sources.stooq_jp.pipeline import StooqJPPipeline
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +33,10 @@ MARKET_SOURCES: dict[str, dict[str, type]] = {
     'kr': {
         'dart': DARTPipeline,
         'krx': KRXPipeline,
+    },
+    'jp': {
+        'edinet': EDINETPipeline,
+        'stooq_jp': StooqJPPipeline,
     },
 }
 
