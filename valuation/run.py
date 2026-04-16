@@ -262,7 +262,7 @@ def main() -> None:
       type=str,
       choices=['us', 'kr', 'jp'],
       default='us',
-      help='Market (us or kr)',
+      help='Market (us, kr, or jp)',
   )
   args = parser.parse_args()
 

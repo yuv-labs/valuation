@@ -67,13 +67,13 @@ class EDINETPipeline(Pipeline):
   @staticmethod
   def _load_code_mapping(
       edinet_dir: Path,
-  ) -> dict[str, dict[str, str]]:
+  ) -> dict[str, dict]:
     """Load EDINET code → {sec_code, name, name_en} mapping."""
     csv_path = edinet_dir / 'EdinetcodeDlInfo.csv'
     if not csv_path.exists():
       return {}
 
-    result: dict[str, dict[str, str]] = {}
+    result: dict[str, dict] = {}
     text = csv_path.read_bytes().decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(text))
 
@@ -87,6 +87,10 @@ class EDINETPipeline(Pipeline):
       name_en = (row.get('Submitter name (English)')
                  or row.get('提出者名（英字）', '')).strip()
 
+      settlement = (row.get('Settlement date')
+                    or row.get('決算日', '')).strip()
+      fye_month = _parse_settlement_month(settlement)
+
       if edinet_code and sec_code:
         ticker = sec_code[:4] if len(sec_code) == 5 else sec_code
         result[edinet_code] = {
@@ -94,6 +98,7 @@ class EDINETPipeline(Pipeline):
             'ticker': ticker,
             'name': name,
             'name_en': name_en,
+            'fye_month': fye_month,
         }
 
     return result
@@ -101,7 +106,7 @@ class EDINETPipeline(Pipeline):
   @staticmethod
   def _extract_all_xbrl(
       edinet_dir: Path,
-      edinet_to_sec: dict[str, dict[str, str]],
+      edinet_to_sec: dict[str, dict],
   ) -> pd.DataFrame:
     """Extract facts from all XBRL zips."""
     xbrl_dir = edinet_dir / 'xbrl'
@@ -112,9 +117,6 @@ class EDINETPipeline(Pipeline):
     parts: list[pd.DataFrame] = []
 
     for zip_path in sorted(xbrl_dir.glob('*.zip')):
-      if zip_path.name.endswith('.meta.json'):
-        continue
-
       df = extractor.extract_facts(zip_path)
       if df.empty:
         continue
@@ -133,8 +135,8 @@ class EDINETPipeline(Pipeline):
         year = end_ts.year
         month = end_ts.month
 
-        fye_month = month
-        fiscal_year = year
+        fye_month: int = info.get('fye_month', 3)
+        fiscal_year = year if month <= fye_month else year + 1
 
         fq = _infer_fiscal_quarter(month, fye_month)
         df['fiscal_year'] = fiscal_year
@@ -160,7 +162,7 @@ class EDINETPipeline(Pipeline):
   @staticmethod
   def _build_companies(
       facts: pd.DataFrame,
-      edinet_to_sec: dict[str, dict[str, str]],
+      edinet_to_sec: dict[str, dict],
   ) -> pd.DataFrame:
     if facts.empty:
       return pd.DataFrame(columns=['cik10', 'ticker', 'title'])
@@ -190,7 +192,7 @@ def _parse_filename(stem: str) -> tuple[str, str, str]:
 
 
 def _infer_fiscal_quarter(end_month: int, fye_month: int) -> str:
-  """Infer fiscal quarter from end month and FYE month."""
+  """Infer fiscal quarter from period end month and FYE month."""
   offset = (end_month - fye_month) % 12
   if offset == 0:
     return 'Q4'
@@ -198,5 +200,16 @@ def _infer_fiscal_quarter(end_month: int, fye_month: int) -> str:
     return 'Q1'
   elif offset <= 6:
     return 'Q2'
-  else:
-    return 'Q3'
+  return 'Q3'
+
+
+_JP_MONTH_MAP: dict[str, int] = {
+    '1月': 1, '2月': 2, '3月': 3, '4月': 4,
+    '5月': 5, '6月': 6, '7月': 7, '8月': 8,
+    '9月': 9, '10月': 10, '11月': 11, '12月': 12,
+}
+
+
+def _parse_settlement_month(settlement: str) -> int:
+  """Parse EDINET settlement date string to FYE month. Default: 3 (March)."""
+  return _JP_MONTH_MAP.get(settlement, 3)

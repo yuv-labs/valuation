@@ -237,7 +237,7 @@ METRIC_SPECS_JP: dict[str, dict] = {
                 'LongTermDebtSummaryOfBusinessResults',
             ],
             'jpigp_cor': [
-                'NonCurrentLabilitiesIFRS',
+                'NonCurrentLabilitiesIFRS',  # Toyota uses this spelling
                 'NonCurrentLiabilitiesIFRS',
                 'NonCurrentFinancialLiabilitiesIFRS',
                 'LongTermBorrowingsIFRS',

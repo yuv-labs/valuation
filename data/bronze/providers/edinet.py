@@ -170,34 +170,47 @@ class EDINETProvider(BronzeProvider):
     return fetched
 
   def _search_documents(self, edinet_code: str) -> list[dict]:
+    """Search EDINET document list for filings by edinet_code.
+
+    EDINET API returns filings submitted on an exact date.
+    Annual reports are typically filed ~3 months after FYE,
+    so we scan the primary filing windows (June/July for March FYE,
+    etc.) day by day.
+    """
     now = datetime.now()
     results: list[dict] = []
+    seen_doc_ids: set[str] = set()
 
     for year_offset in range(self._history_years):
       year = now.year - year_offset
-      for month in [3, 6, 9, 12]:
-        date_str = f'{year}-{month:02d}-28'
-        time.sleep(self._min_interval)
+      for filing_month in [6, 7, 8, 11, 12, 2, 3, 5]:
+        for day in [15, 20, 25, 28]:
+          date_str = f'{year}-{filing_month:02d}-{day:02d}'
+          time.sleep(self._min_interval)
 
-        doc_params: dict[str, str] = {
-            'date': date_str,
-            'type': '2',
-            'Subscription-Key': self._api_key,
-        }
-        resp = requests.get(
-            _DOC_LIST_URL, params=doc_params, timeout=30)
-        if not resp.ok:
-          continue
+          doc_params: dict[str, str] = {
+              'date': date_str,
+              'type': '2',
+              'Subscription-Key': self._api_key,
+          }
+          resp = requests.get(
+              _DOC_LIST_URL, params=doc_params, timeout=30)
+          if not resp.ok:
+            logger.debug('EDINET API %s: %d', date_str,
+                         resp.status_code)
+            continue
 
-        try:
-          data = resp.json()
-        except (ValueError, AttributeError):
-          data = {}
-        docs = data.get('results', [])
-        for doc in docs:
-          if (doc.get('edinetCode') == edinet_code
-              and doc.get('docTypeCode') in _TARGET_DOC_TYPES):
-            results.append(doc)
+          try:
+            data = resp.json()
+          except (ValueError, AttributeError):
+            data = {}
+          for doc in data.get('results', []):
+            doc_id = doc.get('docID', '')
+            if (doc.get('edinetCode') == edinet_code
+                and doc.get('docTypeCode') in _TARGET_DOC_TYPES
+                and doc_id not in seen_doc_ids):
+              results.append(doc)
+              seen_doc_ids.add(doc_id)
 
     return results
 

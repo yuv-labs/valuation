@@ -39,17 +39,15 @@ class TestFilterMarketCap:
     assert set(result['ticker']) == {'7203'}
 
   def test_uses_market_column_not_isdigit(self):
-    """Chinese 6-digit ticker should NOT be classified as KR."""
+    """Market column drives filtering, not ticker format."""
     df = self._make_panel([
         {'ticker': '600519', 'market': 'CN', 'market_cap': 2e12},
         {'ticker': '005930', 'market': 'KR', 'market_cap': 4e14},
     ])
     result = _filter_market_cap(
-        df, min_market_cap_us=2e9, min_market_cap_kr=5e11,
-        min_market_cap_cn=5e10)
-    markets = set(result['market'])
-    assert 'CN' in markets
-    assert 'KR' in markets
+        df, min_market_cap_us=2e9, min_market_cap_kr=5e11)
+    assert 'KR' in set(result['market'])
+    assert '600519' not in set(result['ticker'])
 
   def test_mixed_markets(self):
     df = self._make_panel([

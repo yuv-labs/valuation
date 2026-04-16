@@ -93,8 +93,6 @@ def _filter_market_cap(
     min_market_cap_us: float,
     min_market_cap_kr: float,
     min_market_cap_jp: float = 5e11,
-    min_market_cap_cn: float = 5e10,
-    min_market_cap_eu: float = 5e9,
 ) -> pd.DataFrame:
   """Apply market-specific minimum market cap thresholds."""
   if 'market' not in df.columns:
@@ -106,8 +104,6 @@ def _filter_market_cap(
       'US': min_market_cap_us,
       'KR': min_market_cap_kr,
       'JP': min_market_cap_jp,
-      'CN': min_market_cap_cn,
-      'EU': min_market_cap_eu,
   }
   cap = df['market_cap'].fillna(0)
   mask = pd.Series(False, index=df.index)

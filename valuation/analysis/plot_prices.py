@@ -524,7 +524,7 @@ Examples:
                       type=str,
                       choices=['us', 'kr', 'jp'],
                       default='us',
-                      help='Market (us or kr)')
+                      help='Market (us, kr, or jp)')
   parser.add_argument('--month-interval',
                       type=int,
                       default=3,

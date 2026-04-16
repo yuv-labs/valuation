@@ -31,8 +31,9 @@ def run():
 
   api_key = os.environ.get('EDINET_API_KEY', '')
   if not api_key:
-    print('Warning: EDINET_API_KEY not set. '
-          'Get one at https://disclosure.edinet-fsa.go.jp/')
+    raise SystemExit(
+        'EDINET_API_KEY is required. '
+        'Get one at https://disclosure.edinet-fsa.go.jp/')
 
   edinet = EDINETProvider(
       api_key=api_key,
