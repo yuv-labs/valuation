@@ -28,6 +28,7 @@ from datetime import datetime
 from datetime import timezone
 import json
 from pathlib import Path
+import re
 import time
 from typing import Any, Iterable, Optional
 
@@ -45,6 +46,8 @@ SEC_SUBMISSIONS_URL_TMPL = 'https://data.sec.gov/submissions/CIK{cik10}.json'
 
 # Commonly used by Stooq download button; widely used in practice.
 STOOQ_DAILY_CSV_URL_TMPL = 'https://stooq.com/q/d/l/?s={symbol}&i=d'
+STOOQ_DAILY_CSV_URL_TMPL_APIKEY = (
+    'https://stooq.com/q/d/l/?s={symbol}&i=d&apikey={apikey}')
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,21 @@ class RateLimiter:
     self._last = time.time()
 
 
+class HTTPStatusError(requests.HTTPError):
+  """HTTP error with structured status code for caller inspection."""
+
+  def __init__(self, status_code: int, url: str, body: str):
+    super().__init__(f'HTTP {status_code} for {url}: {body}')
+    self.status_code = status_code
+
+
+def _sanitize_url(url: str) -> str:
+  """Strip apikey query parameter from URL for safe logging/storage."""
+  if 'apikey=' not in url:
+    return url
+  return re.sub(r'[&?]apikey=[^&]*', '', url)
+
+
 def _fetch_bytes(
     session: requests.Session,
     url: str,
@@ -110,6 +128,7 @@ def _fetch_bytes(
     backoff_sec: float = 1.0,
     limiter: Optional[RateLimiter] = None,
 ) -> tuple[bytes, FetchResult]:
+  safe_url = _sanitize_url(url)
   last_err: Optional[Exception] = None
   for attempt in range(retries):
     try:
@@ -121,14 +140,23 @@ def _fetch_bytes(
       content = resp.content
 
       if status >= 400:
-        raise requests.HTTPError(f'HTTP {status} for {url}: {resp.text[:200]}')
+        raise HTTPStatusError(status, safe_url, resp.text[:200])
 
       return content, FetchResult(
-          url=url,
+          url=safe_url,
           status_code=status,
           nbytes=len(content),
           fetched_at_utc=_utc_now_iso(),
       )
+    except HTTPStatusError as e:
+      if e.status_code < 500 and e.status_code != 429:
+        raise  # 4xx client errors — don't retry.
+      last_err = e
+      if attempt < retries - 1:
+        time.sleep(backoff_sec * (2**attempt))
+      else:
+        break
+      continue
     except Exception as e:  # pylint: disable=broad-except
       last_err = e
       if attempt < retries - 1:
@@ -206,6 +234,7 @@ def run(
     force: bool,
     sec_user_agent: str,
     sec_min_interval_sec: float,
+    stooq_apikey: Optional[str] = None,
 ) -> None:
   _ensure_dir(out_dir)
 
@@ -255,10 +284,18 @@ def run(
     cf_url = SEC_COMPANYFACTS_URL_TMPL.format(cik10=cik10)
     cf_path = sec_dir / 'companyfacts' / f'CIK{cik10}.json'
     if force or (not _is_fresh(cf_path, refresh_days)):
-      content, fr = _fetch_bytes(session,
-                                 cf_url,
-                                 headers=sec_headers,
-                                 limiter=sec_limiter)
+      try:
+        content, fr = _fetch_bytes(session,
+                                   cf_url,
+                                   headers=sec_headers,
+                                   limiter=sec_limiter)
+      except HTTPStatusError as e:
+        if e.status_code == 404:
+          print(f'[SEC] skip {ticker} (no companyfacts)')
+          # No companyfacts means no XBRL data — submissions
+          # won't be useful either, so skip the entire ticker.
+          continue
+        raise
       did = _save_if_needed(cf_path,
                             content,
                             fr,
@@ -295,7 +332,11 @@ def run(
   }
   for sym in stooq_symbols:
     sym_n = _normalize_stooq_symbol(sym)
-    url = STOOQ_DAILY_CSV_URL_TMPL.format(symbol=sym_n)
+    if stooq_apikey:
+      url = STOOQ_DAILY_CSV_URL_TMPL_APIKEY.format(
+          symbol=sym_n, apikey=stooq_apikey)
+    else:
+      url = STOOQ_DAILY_CSV_URL_TMPL.format(symbol=sym_n)
     out_path = stooq_dir / f'{sym_n}.csv'
 
     if not force and _is_fresh(out_path, refresh_days):
@@ -350,10 +391,14 @@ def _build_argparser() -> argparse.ArgumentParser:
                  type=float,
                  default=0.2,
                  help='min seconds between SEC requests')
+  p.add_argument('--stooq-apikey',
+                 type=str,
+                 default=None,
+                 help='Stooq API key for CSV downloads')
   return p
 
 
-def _load_tickers_from_file(path: Path) -> list[str]:
+def load_tickers_from_file(path: Path) -> list[str]:
   """Load tickers from file (one per line, # for comments)."""
   if not path.exists():
     raise FileNotFoundError(f'Tickers file not found: {path}')
@@ -375,7 +420,7 @@ if __name__ == '__main__':
   args = _build_argparser().parse_args()
 
   if args.tickers_file:
-    tickers_list = _load_tickers_from_file(args.tickers_file)
+    tickers_list = load_tickers_from_file(args.tickers_file)
     print(f'Loaded {len(tickers_list)} tickers from {args.tickers_file}')
   elif args.tickers:
     tickers_list = args.tickers
@@ -393,4 +438,5 @@ if __name__ == '__main__':
       force=bool(args.force),
       sec_user_agent=str(args.sec_user_agent),
       sec_min_interval_sec=float(args.sec_min_interval),
+      stooq_apikey=args.stooq_apikey,
   )
