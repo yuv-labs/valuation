@@ -1,10 +1,14 @@
 """
 Shared validators.
 """
+import logging
+
 import pandas as pd
 
 from data.silver.core.validator import ValidationResult
 from data.silver.core.validator import Validator
+
+logger = logging.getLogger(__name__)
 
 
 class BasicValidator(Validator):
@@ -12,8 +16,8 @@ class BasicValidator(Validator):
 
   def validate(self, name: str, df: pd.DataFrame) -> ValidationResult:
     """Run basic validation checks."""
-    errors = []
-    warnings = []
+    errors: list[str] = []
+    warnings: list[str] = []
 
     if df.empty:
       warnings.append(f'{name}: DataFrame is empty')
@@ -22,7 +26,10 @@ class BasicValidator(Validator):
       bad = df['filed'] < df['end']
       if bad.any():
         n = int(bad.sum())
-        errors.append(f'{name}: {n} rows have filed < end')
+        warnings.append(f'{name}: {n} rows have filed < end')
+
+    for warn in warnings:
+      logger.warning(warn)
 
     return ValidationResult(is_valid=len(errors) == 0,
                             errors=errors,

@@ -146,7 +146,7 @@ def run_screening(
     track: Track = Track.FULL,
     top_n: int = 30,
     min_market_cap_us: float = 2e9,
-    min_market_cap_kr: float = 5e11,
+    min_market_cap_kr: float = 3e11,
     output_dir: Path | None = None,
 ) -> pd.DataFrame:
   """Run the screening pipeline. Returns ranked DataFrame."""
@@ -223,7 +223,7 @@ def main() -> None:
   parser.add_argument(
       '--min-mcap-us', type=float, default=2e9)
   parser.add_argument(
-      '--min-mcap-kr', type=float, default=5e11)
+      '--min-mcap-kr', type=float, default=3e11)
   args = parser.parse_args()
 
   run_screening(
