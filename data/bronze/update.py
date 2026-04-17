@@ -228,7 +228,7 @@ def _iter_tickers(values: Iterable[str]) -> Iterable[str]:
 
 
 _CACHE_TTL_SEC_TICKERS = 30
-_CACHE_TTL_SEC_COMPANYFACTS = 7
+_CACHE_TTL_SEC_FILINGS = 7
 _CACHE_TTL_STOOQ_DAILY = 1
 
 
@@ -264,11 +264,11 @@ def run(
 
   # 1) company_tickers.json
   tickers_path = sec_dir / 'company_tickers.json'
-  tickers_ck = 'sec/company_tickers.json'
+  tickers_cache_key = 'sec/company_tickers.json'
   if force or (not _is_fresh(tickers_path, refresh_days)):
     if (not force and cache is not None
         and cache.resolve(
-            tickers_ck, tickers_path, _CACHE_TTL_SEC_TICKERS)):
+            tickers_cache_key, tickers_path, _CACHE_TTL_SEC_TICKERS)):
       print(f'[SEC] [cache] saved {tickers_path}')
     else:
       content, fr = _fetch_bytes(
@@ -279,7 +279,7 @@ def run(
           refresh_days=refresh_days, force=force)
       if did:
         if cache is not None:
-          cache.put(tickers_ck, content)
+          cache.put(tickers_cache_key, content)
         print(f'[SEC] saved {tickers_path} ({fr.nbytes} bytes)')
   else:
     print(f'[SEC] skip fresh {tickers_path}')
@@ -297,11 +297,11 @@ def run(
     # companyfacts
     cf_url = SEC_COMPANYFACTS_URL_TMPL.format(cik10=cik10)
     cf_path = sec_dir / 'companyfacts' / f'CIK{cik10}.json'
-    cf_ck = f'sec/companyfacts/CIK{cik10}.json'
+    cf_cache_key = f'sec/companyfacts/CIK{cik10}.json'
     if force or (not _is_fresh(cf_path, refresh_days)):
       if (not force and cache is not None
           and cache.resolve(
-              cf_ck, cf_path, _CACHE_TTL_SEC_COMPANYFACTS)):
+              cf_cache_key, cf_path, _CACHE_TTL_SEC_FILINGS)):
         print(f'[SEC] [cache] saved companyfacts {ticker}')
       else:
         try:
@@ -318,7 +318,7 @@ def run(
             refresh_days=refresh_days, force=force)
         if did:
           if cache is not None:
-            cache.put(cf_ck, content)
+            cache.put(cf_cache_key, content)
           print(f'[SEC] saved companyfacts '
                 f'{ticker} -> {cf_path.name}')
     else:
@@ -328,12 +328,12 @@ def run(
     if include_submissions:
       sub_url = SEC_SUBMISSIONS_URL_TMPL.format(cik10=cik10)
       sub_path = sec_dir / 'submissions' / f'CIK{cik10}.json'
-      sub_ck = f'sec/submissions/CIK{cik10}.json'
+      sub_cache_key = f'sec/submissions/CIK{cik10}.json'
       if force or (not _is_fresh(sub_path, refresh_days)):
         if (not force and cache is not None
             and cache.resolve(
-                sub_ck, sub_path,
-                _CACHE_TTL_SEC_COMPANYFACTS)):
+                sub_cache_key, sub_path,
+                _CACHE_TTL_SEC_FILINGS)):
           print(f'[SEC] [cache] saved submissions {ticker}')
         else:
           content, fr = _fetch_bytes(
@@ -344,7 +344,7 @@ def run(
               refresh_days=refresh_days, force=force)
           if did:
             if cache is not None:
-              cache.put(sub_ck, content)
+              cache.put(sub_cache_key, content)
             print(f'[SEC] saved submissions '
                   f'{ticker} -> {sub_path.name}')
       else:
@@ -368,10 +368,10 @@ def run(
       print(f'[STOOQ] skip fresh {out_path.name}')
       continue
 
-    stooq_ck = f'stooq/daily/{sym_n}.csv'
+    stooq_cache_key = f'stooq/daily/{sym_n}.csv'
     if (not force and cache is not None
         and cache.resolve(
-            stooq_ck, out_path, _CACHE_TTL_STOOQ_DAILY)):
+            stooq_cache_key, out_path, _CACHE_TTL_STOOQ_DAILY)):
       print(f'[STOOQ] [cache] saved {out_path.name}')
       continue
 
@@ -383,7 +383,7 @@ def run(
         refresh_days=refresh_days, force=force)
     if did:
       if cache is not None:
-        cache.put(stooq_ck, content)
+        cache.put(stooq_cache_key, content)
       print(f'[STOOQ] saved {out_path.name} '
             f'({fr.nbytes} bytes)')
 
