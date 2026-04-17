@@ -35,7 +35,7 @@ class TestFilterMarketCap:
     ])
     result = _filter_market_cap(
         df, min_market_cap_us=2e9, min_market_cap_kr=5e11,
-        min_market_cap_jp=5e11)
+        min_market_cap_jp=1e11)
     assert set(result['ticker']) == {'7203'}
 
   def test_uses_market_column_not_isdigit(self):
@@ -57,5 +57,5 @@ class TestFilterMarketCap:
     ])
     result = _filter_market_cap(
         df, min_market_cap_us=2e9, min_market_cap_kr=5e11,
-        min_market_cap_jp=5e11)
+        min_market_cap_jp=1e11)
     assert len(result) == 3

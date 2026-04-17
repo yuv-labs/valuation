@@ -92,7 +92,7 @@ def _filter_market_cap(
     df: pd.DataFrame,
     min_market_cap_us: float,
     min_market_cap_kr: float,
-    min_market_cap_jp: float = 5e11,
+    min_market_cap_jp: float = 1e11,
 ) -> pd.DataFrame:
   """Apply market-specific minimum market cap thresholds."""
   if 'market' not in df.columns:
@@ -157,7 +157,7 @@ def run_screening(
     top_n: int = 30,
     min_market_cap_us: float = 2e9,
     min_market_cap_kr: float = 3e11,
-    min_market_cap_jp: float = 5e11,
+    min_market_cap_jp: float = 1e11,
     output_dir: Path | None = None,
 ) -> pd.DataFrame:
   """Run the screening pipeline. Returns ranked DataFrame."""
@@ -237,7 +237,7 @@ def main() -> None:
   parser.add_argument(
       '--min-mcap-kr', type=float, default=3e11)
   parser.add_argument(
-      '--min-mcap-jp', type=float, default=5e11)
+      '--min-mcap-jp', type=float, default=1e11)
   args = parser.parse_args()
 
   run_screening(
