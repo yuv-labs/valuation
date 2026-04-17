@@ -8,7 +8,7 @@ import json
 import logging
 from pathlib import Path
 import time
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Optional, TYPE_CHECKING
 from xml.etree import ElementTree
 import zipfile
 
@@ -20,6 +20,9 @@ from data.bronze.update import _atomic_write_bytes
 from data.bronze.update import _ensure_dir
 from data.bronze.update import _is_fresh
 from data.bronze.update import _write_meta
+
+if TYPE_CHECKING:
+  from data.bronze.cache import BronzeCache
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,11 @@ _REPRT_CODE_TO_QUARTER = {
 
 # Default: fetch last 5 years for time-series analysis.
 _DEFAULT_HISTORY_YEARS = 5
+
+_CACHE_TTL_CORPCODE = 30
+_CACHE_TTL_FINSTATE = 7
+_CACHE_TTL_HISTORICAL = None  # immutable — past filings never change
+_CACHE_TTL_SHARES = 30
 
 
 def _default_bsns_years() -> list[str]:
@@ -81,6 +89,7 @@ class DARTProvider(BronzeProvider):
       *,
       refresh_days: int = 7,
       force: bool = False,
+      cache: BronzeCache | None = None,
   ) -> ProviderResult:
     dart_dir = out_dir / 'dart'
     _ensure_dir(dart_dir / 'finstate')
@@ -88,19 +97,28 @@ class DARTProvider(BronzeProvider):
     fetched = 0
     skipped = 0
     errors: list[str] = []
+    current_year = datetime.now().year
 
     # 1) Download corp_codes (stock_code -> corp_code mapping)
     corp_xml_path = dart_dir / 'CORPCODE.xml'
+    corp_cache_key = 'dart/CORPCODE.xml'
     if force or not _is_fresh(corp_xml_path, refresh_days):
-      try:
-        self._fetch_corp_codes(corp_xml_path)
+      if (not force and cache is not None
+          and cache.resolve(corp_cache_key, corp_xml_path,
+                            _CACHE_TTL_CORPCODE)):
         fetched += 1
-      except (requests.RequestException, OSError) as exc:
-        errors.append(f'corp_codes: {exc}')
-        return ProviderResult(
-            provider_name=self.name,
-            fetched=fetched, skipped=skipped,
-            errors=errors)
+      else:
+        try:
+          self._fetch_corp_codes(corp_xml_path)
+          if cache is not None:
+            cache.put(corp_cache_key, corp_xml_path.read_bytes())
+          fetched += 1
+        except (requests.RequestException, OSError) as exc:
+          errors.append(f'corp_codes: {exc}')
+          return ProviderResult(
+              provider_name=self.name,
+              fetched=fetched, skipped=skipped,
+              errors=errors)
     else:
       skipped += 1
 
@@ -130,6 +148,16 @@ class DARTProvider(BronzeProvider):
             skipped += 1
             continue
 
+          cache_key = f'dart/finstate/{corp_code}_{year}_{qtr}.json'
+          is_historical = int(year) < current_year
+          cache_ttl = (_CACHE_TTL_HISTORICAL if is_historical
+                       else _CACHE_TTL_FINSTATE)
+
+          if (not force and cache is not None
+              and cache.resolve(cache_key, out_path, cache_ttl)):
+            fetched += 1
+            continue
+
           try:
             data = self._fetch_finstate(
                 corp_code, year, reprt_code)
@@ -152,6 +180,8 @@ class DARTProvider(BronzeProvider):
                 'reprt_code': reprt_code,
                 'quarter': qtr,
             })
+            if cache is not None:
+              cache.put(cache_key, content)
             fetched += 1
             time.sleep(self._min_interval)
           except (requests.RequestException, OSError) as exc:
@@ -167,7 +197,14 @@ class DARTProvider(BronzeProvider):
       ]:
         shares_path = (dart_dir / 'shares'
                        / f'{corp_code}_{shares_label}.json')
+        shares_cache_key = (
+            f'dart/shares/{corp_code}_{shares_label}.json')
         if force or not _is_fresh(shares_path, refresh_days):
+          if (not force and cache is not None
+              and cache.resolve(shares_cache_key, shares_path,
+                                _CACHE_TTL_SHARES)):
+            fetched += 1
+            continue
           try:
             data = self._fetch_shares(
                 corp_code, latest_year, shares_reprt)
@@ -177,6 +214,8 @@ class DARTProvider(BronzeProvider):
                   data, ensure_ascii=False,
                   indent=2).encode('utf-8')
               _atomic_write_bytes(shares_path, content)
+              if cache is not None:
+                cache.put(shares_cache_key, content)
               fetched += 1
               time.sleep(self._min_interval)
           except (requests.RequestException, OSError) as exc:

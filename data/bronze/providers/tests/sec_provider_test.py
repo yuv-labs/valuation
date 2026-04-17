@@ -3,6 +3,7 @@
 import json
 from unittest.mock import patch
 
+from data.bronze.cache import BronzeCache
 from data.bronze.providers.base import BronzeProvider
 from data.bronze.providers.base import ProviderResult
 from data.bronze.providers.sec import SECProvider
@@ -149,3 +150,46 @@ class TestSECProviderFetch:
     sub_file = (
         tmp_path / 'sec' / 'submissions' / f'CIK{cik10}.json')
     assert sub_file.exists()
+
+  @patch('data.bronze.providers.sec._fetch_bytes')
+  def test_stores_fetched_data_in_cache(self, mock_fetch, tmp_path):
+    mock_fetch.side_effect = _mock_fetch_bytes({
+        'company_tickers.json': FAKE_COMPANY_TICKERS,
+        'companyfacts': FAKE_COMPANYFACTS,
+    })
+
+    cache = BronzeCache(cache_dir=tmp_path / 'cache')
+    provider = SECProvider(user_agent='test agent', min_interval_sec=0)
+    provider.fetch(
+        ['AAPL'], tmp_path / 'out', refresh_days=0, force=True,
+        cache=cache)
+
+    assert cache.get_if_fresh(
+        'sec/company_tickers.json', max_age_days=None) is not None
+    assert cache.get_if_fresh(
+        'sec/companyfacts/CIK0000320193.json', max_age_days=None) is not None
+
+  @patch('data.bronze.providers.sec._fetch_bytes')
+  def test_restores_from_cache_without_api_call(self, mock_fetch, tmp_path):
+    mock_fetch.side_effect = _mock_fetch_bytes({
+        'company_tickers.json': FAKE_COMPANY_TICKERS,
+        'companyfacts': FAKE_COMPANYFACTS,
+    })
+
+    cache = BronzeCache(cache_dir=tmp_path / 'cache')
+    provider = SECProvider(user_agent='test agent', min_interval_sec=0)
+
+    # First fetch — populates cache
+    provider.fetch(
+        ['AAPL'], tmp_path / 'out1', refresh_days=0, force=True,
+        cache=cache)
+    calls_after_first = mock_fetch.call_count
+
+    # Second fetch to a different out_dir — should use cache
+    provider.fetch(
+        ['AAPL'], tmp_path / 'out2', refresh_days=0, force=False,
+        cache=cache)
+
+    assert (tmp_path / 'out2' / 'sec' / 'companyfacts'
+            / 'CIK0000320193.json').exists()
+    assert mock_fetch.call_count == calls_after_first

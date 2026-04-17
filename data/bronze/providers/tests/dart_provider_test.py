@@ -5,6 +5,7 @@ import json
 from unittest.mock import patch
 import zipfile
 
+from data.bronze.cache import BronzeCache
 from data.bronze.providers.base import BronzeProvider
 from data.bronze.providers.base import ProviderResult
 from data.bronze.providers.dart import DARTProvider
@@ -121,3 +122,60 @@ class TestDARTProviderFetch:
         ['999999'], tmp_path, refresh_days=0, force=True)
 
     assert any('999999' in e for e in result.errors)
+
+  @patch('data.bronze.providers.dart.requests.get')
+  def test_stores_fetched_data_in_cache(
+      self, mock_get, tmp_path):
+    zip_bytes = _make_corp_zip()
+
+    def side_effect(url, **_kwargs):
+      if 'corpCode' in url:
+        return _mock_response(zip_bytes)
+      return _mock_response(FAKE_FINSTATE_RESPONSE, is_json=True)
+
+    mock_get.side_effect = side_effect
+
+    cache = BronzeCache(cache_dir=tmp_path / 'cache')
+    provider = DARTProvider(
+        api_key='test', bsns_years=['2024'],
+        reprt_codes=['11011'])
+    provider.fetch(
+        ['005930'], tmp_path / 'out', refresh_days=0, force=True,
+        cache=cache)
+
+    assert cache.get_if_fresh(
+        'dart/CORPCODE.xml', max_age_days=None) is not None
+    assert cache.get_if_fresh(
+        'dart/finstate/00126380_2024_Q4.json', max_age_days=None) is not None
+
+  @patch('data.bronze.providers.dart.requests.get')
+  def test_restores_from_cache_without_api_call(
+      self, mock_get, tmp_path):
+    zip_bytes = _make_corp_zip()
+
+    def side_effect(url, **_kwargs):
+      if 'corpCode' in url:
+        return _mock_response(zip_bytes)
+      return _mock_response(FAKE_FINSTATE_RESPONSE, is_json=True)
+
+    mock_get.side_effect = side_effect
+
+    cache = BronzeCache(cache_dir=tmp_path / 'cache')
+    provider = DARTProvider(
+        api_key='test', bsns_years=['2024'],
+        reprt_codes=['11011'])
+
+    # First fetch — populates cache
+    provider.fetch(
+        ['005930'], tmp_path / 'out1', refresh_days=0, force=True,
+        cache=cache)
+    calls_after_first = mock_get.call_count
+
+    # Second fetch to different out_dir — should use cache
+    provider.fetch(
+        ['005930'], tmp_path / 'out2', refresh_days=0, force=False,
+        cache=cache)
+
+    assert (tmp_path / 'out2' / 'dart' / 'finstate'
+            / '00126380_2024_Q4.json').exists()
+    assert mock_get.call_count == calls_after_first
