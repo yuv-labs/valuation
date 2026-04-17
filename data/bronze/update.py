@@ -59,7 +59,6 @@ class FetchResult:
   status_code: int
   nbytes: int
   fetched_at_utc: str
-  from_cache: bool = False
 
 
 def _utc_now_iso() -> str:
@@ -131,23 +130,8 @@ def _fetch_bytes(
     retries: int = 3,
     backoff_sec: float = 1.0,
     limiter: Optional[RateLimiter] = None,
-    cache: Optional['BronzeCache'] = None,
-    cache_key: Optional[str] = None,
-    cache_max_age_days: Optional[int] = None,
 ) -> tuple[bytes, FetchResult]:
   safe_url = _sanitize_url(url)
-
-  if cache is not None and cache_key is not None:
-    cached = cache.get_if_fresh(cache_key, cache_max_age_days)
-    if cached is not None:
-      return cached, FetchResult(
-          url=safe_url,
-          status_code=200,
-          nbytes=len(cached),
-          fetched_at_utc=_utc_now_iso(),
-          from_cache=True,
-      )
-
   last_err: Optional[Exception] = None
   for attempt in range(retries):
     try:
@@ -160,9 +144,6 @@ def _fetch_bytes(
 
       if status >= 400:
         raise HTTPStatusError(status, safe_url, resp.text[:200])
-
-      if cache is not None and cache_key is not None:
-        cache.put(cache_key, content)
 
       return content, FetchResult(
           url=safe_url,
@@ -246,9 +227,9 @@ def _iter_tickers(values: Iterable[str]) -> Iterable[str]:
         yield t.upper()
 
 
-_SEC_CACHE_TTL_TICKERS = 30
-_SEC_CACHE_TTL_COMPANYFACTS = 7
-_STOOQ_CACHE_TTL_DAILY = 1
+_CACHE_TTL_SEC_TICKERS = 30
+_CACHE_TTL_SEC_COMPANYFACTS = 7
+_CACHE_TTL_STOOQ_DAILY = 1
 
 
 def run(
@@ -283,22 +264,23 @@ def run(
 
   # 1) company_tickers.json
   tickers_path = sec_dir / 'company_tickers.json'
+  tickers_ck = 'sec/company_tickers.json'
   if force or (not _is_fresh(tickers_path, refresh_days)):
-    content, fr = _fetch_bytes(session,
-                               SEC_COMPANY_TICKERS_URL,
-                               headers=sec_headers,
-                               limiter=sec_limiter,
-                               cache=cache,
-                               cache_key='sec/company_tickers.json',
-                               cache_max_age_days=_SEC_CACHE_TTL_TICKERS)
-    did = _save_if_needed(tickers_path,
-                          content,
-                          fr,
-                          refresh_days=refresh_days,
-                          force=force)
-    if did:
-      tag = ' [cache]' if fr.from_cache else ''
-      print(f'[SEC]{tag} saved {tickers_path} ({fr.nbytes} bytes)')
+    if (not force and cache is not None
+        and cache.resolve(
+            tickers_ck, tickers_path, _CACHE_TTL_SEC_TICKERS)):
+      print(f'[SEC] [cache] saved {tickers_path}')
+    else:
+      content, fr = _fetch_bytes(
+          session, SEC_COMPANY_TICKERS_URL,
+          headers=sec_headers, limiter=sec_limiter)
+      did = _save_if_needed(
+          tickers_path, content, fr,
+          refresh_days=refresh_days, force=force)
+      if did:
+        if cache is not None:
+          cache.put(tickers_ck, content)
+        print(f'[SEC] saved {tickers_path} ({fr.nbytes} bytes)')
   else:
     print(f'[SEC] skip fresh {tickers_path}')
 
@@ -315,28 +297,30 @@ def run(
     # companyfacts
     cf_url = SEC_COMPANYFACTS_URL_TMPL.format(cik10=cik10)
     cf_path = sec_dir / 'companyfacts' / f'CIK{cik10}.json'
+    cf_ck = f'sec/companyfacts/CIK{cik10}.json'
     if force or (not _is_fresh(cf_path, refresh_days)):
-      try:
-        content, fr = _fetch_bytes(
-            session, cf_url, headers=sec_headers, limiter=sec_limiter,
-            cache=cache,
-            cache_key=f'sec/companyfacts/CIK{cik10}.json',
-            cache_max_age_days=_SEC_CACHE_TTL_COMPANYFACTS)
-      except HTTPStatusError as e:
-        if e.status_code == 404:
-          print(f'[SEC] skip {ticker} (no companyfacts)')
-          # No companyfacts means no XBRL data — submissions
-          # won't be useful either, so skip the entire ticker.
-          continue
-        raise
-      did = _save_if_needed(cf_path,
-                            content,
-                            fr,
-                            refresh_days=refresh_days,
-                            force=force)
-      if did:
-        tag = ' [cache]' if fr.from_cache else ''
-        print(f'[SEC]{tag} saved companyfacts {ticker} -> {cf_path.name}')
+      if (not force and cache is not None
+          and cache.resolve(
+              cf_ck, cf_path, _CACHE_TTL_SEC_COMPANYFACTS)):
+        print(f'[SEC] [cache] saved companyfacts {ticker}')
+      else:
+        try:
+          content, fr = _fetch_bytes(
+              session, cf_url,
+              headers=sec_headers, limiter=sec_limiter)
+        except HTTPStatusError as e:
+          if e.status_code == 404:
+            print(f'[SEC] skip {ticker} (no companyfacts)')
+            continue
+          raise
+        did = _save_if_needed(
+            cf_path, content, fr,
+            refresh_days=refresh_days, force=force)
+        if did:
+          if cache is not None:
+            cache.put(cf_ck, content)
+          print(f'[SEC] saved companyfacts '
+                f'{ticker} -> {cf_path.name}')
     else:
       print(f'[SEC] skip fresh companyfacts {ticker}')
 
@@ -344,27 +328,32 @@ def run(
     if include_submissions:
       sub_url = SEC_SUBMISSIONS_URL_TMPL.format(cik10=cik10)
       sub_path = sec_dir / 'submissions' / f'CIK{cik10}.json'
+      sub_ck = f'sec/submissions/CIK{cik10}.json'
       if force or (not _is_fresh(sub_path, refresh_days)):
-        content, fr = _fetch_bytes(
-            session, sub_url, headers=sec_headers, limiter=sec_limiter,
-            cache=cache,
-            cache_key=f'sec/submissions/CIK{cik10}.json',
-            cache_max_age_days=_SEC_CACHE_TTL_COMPANYFACTS)
-        did = _save_if_needed(sub_path,
-                              content,
-                              fr,
-                              refresh_days=refresh_days,
-                              force=force)
-        if did:
-          tag = ' [cache]' if fr.from_cache else ''
-          print(f'[SEC]{tag} saved submissions {ticker} -> {sub_path.name}')
+        if (not force and cache is not None
+            and cache.resolve(
+                sub_ck, sub_path,
+                _CACHE_TTL_SEC_COMPANYFACTS)):
+          print(f'[SEC] [cache] saved submissions {ticker}')
+        else:
+          content, fr = _fetch_bytes(
+              session, sub_url,
+              headers=sec_headers, limiter=sec_limiter)
+          did = _save_if_needed(
+              sub_path, content, fr,
+              refresh_days=refresh_days, force=force)
+          if did:
+            if cache is not None:
+              cache.put(sub_ck, content)
+            print(f'[SEC] saved submissions '
+                  f'{ticker} -> {sub_path.name}')
       else:
         print(f'[SEC] skip fresh submissions {ticker}')
 
   # 3) Stooq daily price CSV
-  # Note: Stooq may rate-limit/geo-block occasionally; keep retries modest.
   px_headers = {
-      'User-Agent': 'Mozilla/5.0 (compatible; valuation-research/1.0)'
+      'User-Agent':
+          'Mozilla/5.0 (compatible; valuation-research/1.0)'
   }
   for sym in stooq_symbols:
     sym_n = _normalize_stooq_symbol(sym)
@@ -379,23 +368,24 @@ def run(
       print(f'[STOOQ] skip fresh {out_path.name}')
       continue
 
-    content, fr = _fetch_bytes(session,
-                               url,
-                               headers=px_headers,
-                               timeout_sec=30,
-                               retries=3,
-                               backoff_sec=1.0,
-                               cache=cache,
-                               cache_key=f'stooq/daily/{sym_n}.csv',
-                               cache_max_age_days=_STOOQ_CACHE_TTL_DAILY)
-    did = _save_if_needed(out_path,
-                          content,
-                          fr,
-                          refresh_days=refresh_days,
-                          force=force)
+    stooq_ck = f'stooq/daily/{sym_n}.csv'
+    if (not force and cache is not None
+        and cache.resolve(
+            stooq_ck, out_path, _CACHE_TTL_STOOQ_DAILY)):
+      print(f'[STOOQ] [cache] saved {out_path.name}')
+      continue
+
+    content, fr = _fetch_bytes(
+        session, url, headers=px_headers,
+        timeout_sec=30, retries=3, backoff_sec=1.0)
+    did = _save_if_needed(
+        out_path, content, fr,
+        refresh_days=refresh_days, force=force)
     if did:
-      tag = ' [cache]' if fr.from_cache else ''
-      print(f'[STOOQ]{tag} saved {out_path.name} ({fr.nbytes} bytes)')
+      if cache is not None:
+        cache.put(stooq_ck, content)
+      print(f'[STOOQ] saved {out_path.name} '
+            f'({fr.nbytes} bytes)')
 
 
 def _build_argparser() -> argparse.ArgumentParser:
