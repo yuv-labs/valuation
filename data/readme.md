@@ -6,25 +6,61 @@ ETL pipeline for financial data processing with medallion architecture.
 
 **Purpose**: Raw data ingestion from external sources
 
-**Sources**:
+### US Data
 
-- SEC EDGAR API (companyfacts JSON)
-- Stooq (historical stock prices CSV)
-
-**Example**:
+**SEC companyfacts** (financial statements):
 
 ```bash
-python -m data.bronze.update --tickers AAPL GOOGL
+python -m data.bronze.update \
+  --tickers-file example/tickers/russell1000.txt \
+  --sec-user-agent "YourName research (you@email.com)" \
+  --refresh-days 7
 ```
 
-or
+**Stooq prices** (daily OHLCV — via dump file):
+
+Stooq's per-ticker API has daily rate limits. Use the bulk dump instead:
+
+1. Download from <https://stooq.com/db/h/> → Historical Data → U.S. Daily ASCII
+2. Ingest:
 
 ```bash
-python -m data.bronze.update --tickers-file example/tickers/bigtech.txt \
-  --sec-user-agent "StevenJobs valuation research (stevenjobs@gmail.com)"
+python -m data.bronze.ingest_stooq_dump \
+  --zip ~/Downloads/d_us_txt.zip \
+  --tickers-file example/tickers/russell1000.txt
 ```
 
 **Output**: `data/bronze/out/sec/`, `data/bronze/out/stooq/`
+
+### KR Data
+
+**DART** (financial statements): collected via DART Open API into
+`data/bronze/out/dart/`. Requires `DART_API_KEY` env var.
+
+**KRX prices** (daily OHLCV via pykrx):
+
+```bash
+python -m data.bronze.update_krx \
+  --tickers-file example/tickers/kr_filtered.txt
+```
+
+**Output**: `data/bronze/out/dart/`, `data/bronze/out/krx/`
+
+### Ticker Lists (`example/tickers/`)
+
+| File | Description | Count |
+|:--|:--|--:|
+| `russell1000.txt` | Russell 1000 (US screening pool) | 1,006 |
+| `kr_filtered.txt` | KR >= 3000억 market cap | ~342 |
+| `kr_all.txt` | All KR listed (DART CORPCODE) | 3,959 |
+| `dow30.txt` | Dow 30 (example) | 30 |
+| `bigtech.txt` | Big tech (example) | 4 |
+
+Regenerate `kr_filtered.txt`:
+
+```bash
+python scripts/filter_kr_by_mcap.py
+```
 
 ## Silver Layer
 
@@ -38,22 +74,17 @@ python -m data.bronze.update --tickers-file example/tickers/bigtech.txt \
 4. **Shares normalization**: Actual count (not millions)
 5. **PIT history**: All historical values for backtesting
 
+```bash
+python -m data.silver.build --markets us      # US only
+python -m data.silver.build --markets kr      # KR only
+python -m data.silver.build --markets us kr   # Both
+```
+
 **Outputs**:
 
 - `companies.parquet`: Company metadata (ticker, cik, FYE)
-- `metrics_quarterly.parquet`: All filed versions of quarterly metrics (PIT support)
 - `facts_long.parquet`: Raw facts with all filed versions
 - `prices_daily.parquet`: Daily stock prices
-
-**Metric Specifications** (`silver/config/metric_specs.py`):
-
-```python
-METRIC_SPECS = {
-    'CFO': {...},      # Cash from operations
-    'CAPEX': {...},    # Capital expenditures (6 tags for different industries)
-    'SHARES': {...},   # Diluted shares outstanding
-}
-```
 
 **See [silver/README.md](silver/README.md) for details.**
 
@@ -61,25 +92,78 @@ METRIC_SPECS = {
 
 **Purpose**: Build analytical panels by joining Silver datasets
 
-**Outputs**:
-
-- `valuation_panel.parquet`: Latest filed version only (current valuation)
-- `backtest_panel.parquet`: All filed versions (PIT backtesting)
-
-```text
-Columns: [ticker, end, filed, cfo_q, cfo_ttm, capex_q, capex_ttm,
-          shares_q, date, price, market_cap]
+```bash
+python -m data.gold.build --panel screening --min-date 2019-01-01
+python -m data.gold.build --panel valuation --min-date 2010-01-01
 ```
 
-**Panel Construction**:
+**Outputs**:
 
-1. Load Silver datasets (metrics, companies, prices)
-2. Pivot metrics to wide format
-3. Normalize shares to latest filed version (for split consistency)
-4. Join with stock prices (using `filed` date for PIT)
-5. Validate schema and constraints
+- `screening_panel.parquet`: Screening metrics (PE, ROIC, moat signals)
+- `valuation_panel.parquet`: Latest filed version (current valuation)
+- `backtest_panel.parquet`: All filed versions (PIT backtesting)
 
 **See [gold/README.md](gold/README.md) for details.**
+
+## Full Refresh Runbook
+
+### US
+
+```bash
+# 1. Download Stooq dump: stooq.com/db/h/ → Historical → U.S. Daily ASCII
+# 2. Ingest prices
+python -m data.bronze.ingest_stooq_dump \
+  --zip ~/Downloads/d_us_txt.zip \
+  --tickers-file example/tickers/russell1000.txt
+# 3. Fetch SEC financials
+python -m data.bronze.update \
+  --tickers-file example/tickers/russell1000.txt \
+  --sec-user-agent "YourName research (you@email.com)"
+# 4. Build Silver → Gold → Screen
+python -m data.silver.build --markets us
+python -m data.gold.build --panel screening --min-date 2019-01-01
+python -m screening.run --track moat --top 50
+```
+
+### KR
+
+```bash
+# 1. Fetch KRX prices
+python -m data.bronze.update_krx \
+  --tickers-file example/tickers/kr_filtered.txt
+# 2. Fetch DART financials (requires DART_API_KEY env var)
+#    No standalone CLI yet — use DARTProvider programmatically:
+python -c "
+from pathlib import Path
+import os
+from data.bronze.providers.dart import DARTProvider
+from data.bronze.update import load_tickers_from_file
+tickers = load_tickers_from_file(Path('example/tickers/kr_filtered.txt'))
+provider = DARTProvider(api_key=os.environ['DART_API_KEY'])
+result = provider.fetch(tickers, Path('data/bronze/out'))
+print(f'Fetched: {result.fetched}, Errors: {len(result.errors)}')
+"
+# 3. Build Silver → Gold → Screen
+python -m data.silver.build --markets kr
+python -m data.gold.build --panel screening --min-date 2019-01-01
+python -m screening.run --track moat --min-mcap-kr 3e11 --top 50
+```
+
+## Known Issues
+
+- **Stooq API rate limit**: Per-ticker API has daily hit limits
+  (relaxed with an optional API key). Use the bulk dump file for
+  initial ingestion.
+- **SEC 404**: Some CIKs (ETFs, SPACs, shell companies) have no
+  companyfacts. The ingestion script skips these automatically.
+- **SEC filed < end**: A small number of SEC filings have `filed` dates
+  before `end` dates. Treated as a warning, not a blocking error.
+- **pykrx connectivity**: KRX data fetching (via pykrx) may fail in
+  some network environments (overseas IP, VPN). Retry from a domestic
+  network if requests time out or return empty results.
+- **Financial services**: No CAPEX data (different valuation needed).
+- **Stock splits**: Shares normalized to latest filed version in
+  backtest_panel.
 
 ## Data Quality
 
@@ -95,8 +179,3 @@ Columns: [ticker, end, filed, cfo_q, cfo_ttm, capex_q, capex_ttm,
 1. Schema compliance
 2. Required fields (no NaN in critical columns)
 3. Date alignment (filed ≤ date)
-
-### Known Limitations
-
-- **Financial services**: No CAPEX data (different valuation approach needed)
-- **Stock splits**: Shares normalized to latest filed version in backtest_panel

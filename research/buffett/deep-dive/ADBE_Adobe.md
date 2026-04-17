@@ -2,7 +2,7 @@
 
 기준일: 2026-04-10 | 주가: $225.35 (NASDAQ)
 
-> 이 문서는 [shallow dive](../shallow-dive/ADBE_Adobe_shallow_dive.md)의 후속 심층 분석이다.
+> 이 문서는 [shallow dive](../shallow-dive/ADBE_Adobe.md)의 후속 심층 분석이다.
 > Shallow dive에서 도출한 "저평가" 결론의 전제를 검증하고, 사업 구조를 상세히 분석한다.
 
 ---
