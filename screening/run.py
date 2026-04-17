@@ -156,12 +156,8 @@ def run_screening(
     track: Track = Track.FULL,
     top_n: int = 30,
     min_market_cap_us: float = 2e9,
-<<<<<<< HEAD
     min_market_cap_kr: float = 3e11,
-=======
-    min_market_cap_kr: float = 5e11,
     min_market_cap_jp: float = 5e11,
->>>>>>> 35d049a (feat: add market column and generalize multi-market infrastructure)
     output_dir: Path | None = None,
 ) -> pd.DataFrame:
   """Run the screening pipeline. Returns ranked DataFrame."""
@@ -239,13 +235,9 @@ def main() -> None:
   parser.add_argument(
       '--min-mcap-us', type=float, default=2e9)
   parser.add_argument(
-<<<<<<< HEAD
       '--min-mcap-kr', type=float, default=3e11)
-=======
-      '--min-mcap-kr', type=float, default=5e11)
   parser.add_argument(
       '--min-mcap-jp', type=float, default=5e11)
->>>>>>> 35d049a (feat: add market column and generalize multi-market infrastructure)
   args = parser.parse_args()
 
   run_screening(
