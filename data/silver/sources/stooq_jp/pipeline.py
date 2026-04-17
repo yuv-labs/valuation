@@ -13,15 +13,8 @@ class StooqJPPipeline(StooqPipeline):
 
   def __init__(self, context: PipelineContext):
     super().__init__(context)
+    self.stooq_dir = context.bronze_dir / 'stooq_jp' / 'daily'
     self.out_dir = context.silver_dir / 'stooq_jp'
-
-  def extract(self) -> None:
-    super().extract()
-    prices = self.datasets.get('prices_daily')
-    if prices is not None and not prices.empty:
-      jp_mask = prices['symbol'].str.endswith('.JP')
-      self.datasets['prices_daily'] = (
-          prices[jp_mask].reset_index(drop=True))
 
   def load(self) -> None:
     self.out_dir.mkdir(parents=True, exist_ok=True)

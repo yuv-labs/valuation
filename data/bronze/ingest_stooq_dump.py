@@ -47,13 +47,22 @@ def _convert_dump_to_csv(raw_bytes: bytes) -> bytes:
   return df.to_csv(index=False).encode('utf-8')
 
 
+_MARKET_SUFFIX = {'us': '.us', 'jp': '.jp'}
+_MARKET_SUBDIR = {'us': 'stooq', 'jp': 'stooq_jp'}
+_MARKET_FILTER = {'us': '/us/', 'jp': '/jp/tse stocks/'}
+
+
 def run(
     zip_path: Path,
     out_dir: Path,
     tickers_file: Path | None,
+    market: str = 'us',
 ) -> None:
-  stooq_dir = out_dir / 'stooq' / 'daily'
+  subdir = _MARKET_SUBDIR.get(market, f'stooq_{market}')
+  stooq_dir = out_dir / subdir / 'daily'
   stooq_dir.mkdir(parents=True, exist_ok=True)
+  suffix = _MARKET_SUFFIX.get(market, f'.{market}')
+  path_filter = _MARKET_FILTER.get(market, f'/{market}/')
 
   allowed_tickers: set[str] | None = None
   if tickers_file:
@@ -74,11 +83,14 @@ def run(
       if not name.endswith('.txt'):
         continue
 
+      if path_filter not in name:
+        continue
+
       fpath = Path(name)
       symbol = fpath.stem
 
       if allowed_tickers:
-        ticker_bare = symbol.removesuffix('.us')
+        ticker_bare = symbol.removesuffix(suffix)
         if ticker_bare not in allowed_tickers:
           skipped += 1
           continue
@@ -116,12 +128,16 @@ def main():
   parser.add_argument(
       '--tickers-file', type=Path, default=None,
       help='Only extract tickers in this file (optional)')
+  parser.add_argument(
+      '--market', type=str, default='us',
+      choices=['us', 'jp'],
+      help='Market to extract (us or jp)')
   args = parser.parse_args()
 
   if not args.zip.exists():
     raise FileNotFoundError(f'ZIP not found: {args.zip}')
 
-  run(args.zip, args.out, args.tickers_file)
+  run(args.zip, args.out, args.tickers_file, market=args.market)
 
 
 if __name__ == '__main__':
