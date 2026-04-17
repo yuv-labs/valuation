@@ -46,6 +46,28 @@ python -m data.bronze.update_krx \
 
 **Output**: `data/bronze/out/dart/`, `data/bronze/out/krx/`
 
+### Shared Cache
+
+Bronze API responses are cached in `~/.cache/valuation/bronze/` so
+multiple git worktrees share the same data. When a worktree is deleted,
+cached data persists and is restored on next run without API calls.
+
+```bash
+# Cache is enabled by default — no extra flags needed
+python -m data.bronze.update --tickers AAPL \
+  --sec-user-agent "YourName research (you@email.com)"
+
+# Disable cache
+python -m data.bronze.update --no-cache --tickers AAPL ...
+
+# Custom cache directory
+python -m data.bronze.update --cache-dir /tmp/my-cache --tickers AAPL ...
+```
+
+TTL varies by data type: historical filings are cached permanently,
+daily prices refresh after 1 day, and current-year filings after 7 days.
+Use `--force` to bypass both local freshness and cache.
+
 ### Ticker Lists (`example/tickers/`)
 
 | File | Description | Count |
