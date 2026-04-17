@@ -74,8 +74,8 @@ def run(
       if not name.endswith('.txt'):
         continue
 
-      basename = Path(name).name
-      symbol = basename.replace('.txt', '')
+      fpath = Path(name)
+      symbol = fpath.stem
 
       if allowed_tickers:
         ticker_bare = symbol.removesuffix('.us')
@@ -83,7 +83,7 @@ def run(
           skipped += 1
           continue
 
-      csv_name = basename.replace('.txt', '.csv')
+      csv_name = fpath.with_suffix('.csv').name
       dest = stooq_dir / csv_name
 
       try:

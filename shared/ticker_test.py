@@ -19,6 +19,10 @@ class TestIsKrTicker:
     assert not is_kr_ticker('KR')
     assert not is_kr_ticker('ZTS')
 
+  def test_lowercase_rejected(self):
+    assert not is_kr_ticker('0126z0')
+    assert not is_kr_ticker('0001a0')
+
   def test_edge_cases(self):
     assert not is_kr_ticker('')
     assert not is_kr_ticker('00001A')
