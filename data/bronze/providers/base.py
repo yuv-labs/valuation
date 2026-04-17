@@ -7,7 +7,10 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, TYPE_CHECKING
+
+if TYPE_CHECKING:
+  from data.bronze.cache import BronzeCache
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,7 @@ class BronzeProvider(ABC):
       *,
       refresh_days: int = 7,
       force: bool = False,
+      cache: BronzeCache | None = None,
   ) -> ProviderResult:
     """
     Fetch raw data for the given tickers and write to out_dir.
@@ -44,6 +48,7 @@ class BronzeProvider(ABC):
       out_dir: Root output directory (provider creates subdirs).
       refresh_days: Skip if file newer than N days. 0 = always.
       force: Always re-download regardless of freshness.
+      cache: Shared cache for API responses across worktrees.
 
     Returns:
       ProviderResult summarising what happened.

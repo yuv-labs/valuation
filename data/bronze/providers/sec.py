@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, TYPE_CHECKING
 
 import requests
 
@@ -16,10 +16,16 @@ from data.bronze.update import _load_ticker_map
 from data.bronze.update import _save_if_needed
 from data.bronze.update import RateLimiter
 
+if TYPE_CHECKING:
+  from data.bronze.cache import BronzeCache
+
 SEC_COMPANY_TICKERS_URL = 'https://www.sec.gov/files/company_tickers.json'
 SEC_COMPANYFACTS_URL_TMPL = (
     'https://data.sec.gov/api/xbrl/companyfacts/CIK{cik10}.json')
 SEC_SUBMISSIONS_URL_TMPL = 'https://data.sec.gov/submissions/CIK{cik10}.json'
+
+_CACHE_TTL_TICKERS = 30
+_CACHE_TTL_COMPANYFACTS = 7
 
 
 class SECProvider(BronzeProvider):
@@ -46,6 +52,7 @@ class SECProvider(BronzeProvider):
       *,
       refresh_days: int = 7,
       force: bool = False,
+      cache: BronzeCache | None = None,
   ) -> ProviderResult:
     sec_dir = out_dir / 'sec'
     _ensure_dir(sec_dir / 'companyfacts')
@@ -64,19 +71,25 @@ class SECProvider(BronzeProvider):
 
     # 1) company_tickers.json
     tickers_path = sec_dir / 'company_tickers.json'
+    tickers_cache_key = 'sec/company_tickers.json'
     if force or not _is_fresh(tickers_path, refresh_days):
-      content, fr = _fetch_bytes(
-          session,
-          SEC_COMPANY_TICKERS_URL,
-          headers=headers,
-          limiter=limiter,
-      )
-      did = _save_if_needed(
-          tickers_path, content, fr, refresh_days=refresh_days, force=force)
-      if did:
+      if (not force and cache is not None
+          and cache.resolve(tickers_cache_key, tickers_path,
+                            _CACHE_TTL_TICKERS)):
         fetched += 1
       else:
-        skipped += 1
+        content, fr = _fetch_bytes(
+            session, SEC_COMPANY_TICKERS_URL,
+            headers=headers, limiter=limiter)
+        did = _save_if_needed(
+            tickers_path, content, fr,
+            refresh_days=refresh_days, force=force)
+        if did:
+          if cache is not None:
+            cache.put(tickers_cache_key, content)
+          fetched += 1
+        else:
+          skipped += 1
     else:
       skipped += 1
 
@@ -94,15 +107,24 @@ class SECProvider(BronzeProvider):
       # companyfacts
       cf_url = SEC_COMPANYFACTS_URL_TMPL.format(cik10=cik10)
       cf_path = sec_dir / 'companyfacts' / f'CIK{cik10}.json'
+      cf_cache_key = f'sec/companyfacts/CIK{cik10}.json'
       if force or not _is_fresh(cf_path, refresh_days):
-        content, fr = _fetch_bytes(
-            session, cf_url, headers=headers, limiter=limiter)
-        did = _save_if_needed(
-            cf_path, content, fr, refresh_days=refresh_days, force=force)
-        if did:
+        if (not force and cache is not None
+            and cache.resolve(cf_cache_key, cf_path,
+                              _CACHE_TTL_COMPANYFACTS)):
           fetched += 1
         else:
-          skipped += 1
+          content, fr = _fetch_bytes(
+              session, cf_url, headers=headers, limiter=limiter)
+          did = _save_if_needed(
+              cf_path, content, fr,
+              refresh_days=refresh_days, force=force)
+          if did:
+            if cache is not None:
+              cache.put(cf_cache_key, content)
+            fetched += 1
+          else:
+            skipped += 1
       else:
         skipped += 1
 
@@ -110,15 +132,24 @@ class SECProvider(BronzeProvider):
       if self._include_submissions:
         sub_url = SEC_SUBMISSIONS_URL_TMPL.format(cik10=cik10)
         sub_path = sec_dir / 'submissions' / f'CIK{cik10}.json'
+        sub_cache_key = f'sec/submissions/CIK{cik10}.json'
         if force or not _is_fresh(sub_path, refresh_days):
-          content, fr = _fetch_bytes(
-              session, sub_url, headers=headers, limiter=limiter)
-          did = _save_if_needed(
-              sub_path, content, fr, refresh_days=refresh_days, force=force)
-          if did:
+          if (not force and cache is not None
+              and cache.resolve(sub_cache_key, sub_path,
+                                _CACHE_TTL_COMPANYFACTS)):
             fetched += 1
           else:
-            skipped += 1
+            content, fr = _fetch_bytes(
+                session, sub_url, headers=headers, limiter=limiter)
+            did = _save_if_needed(
+                sub_path, content, fr,
+                refresh_days=refresh_days, force=force)
+            if did:
+              if cache is not None:
+                cache.put(sub_cache_key, content)
+              fetched += 1
+            else:
+              skipped += 1
         else:
           skipped += 1
 

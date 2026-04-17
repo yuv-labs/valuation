@@ -2,6 +2,7 @@
 import argparse
 from pathlib import Path
 
+from data.bronze.cache import BronzeCache
 from data.bronze.providers.krx import KRXProvider
 from data.bronze.update import load_tickers_from_file
 
@@ -27,8 +28,18 @@ def run():
   parser.add_argument(
       '--force', action='store_true',
       help='Force refetch even if fresh')
+  parser.add_argument(
+      '--cache-dir', type=Path, default=None,
+      help='Shared cache directory (default: ~/.cache/valuation/bronze/)')
+  parser.add_argument(
+      '--no-cache', action='store_true',
+      help='Disable shared cache')
 
   args = parser.parse_args()
+
+  cache = None if args.no_cache else BronzeCache(cache_dir=args.cache_dir)
+  if cache is not None:
+    print(f'[cache] {cache.cache_dir}')
 
   tickers = args.tickers or load_tickers_from_file(args.tickers_file)
   print(f'Loaded {len(tickers)} tickers')
@@ -39,6 +50,7 @@ def run():
       out_dir=args.out,
       refresh_days=0 if args.force else 1,
       force=args.force,
+      cache=cache,
   )
 
   print(f'Done! Fetched: {result.fetched}, Skipped: {result.skipped}')
