@@ -297,12 +297,6 @@ ResMed는 **CPAP 장비 + 마스크/소모품 razor-blade**로 전 세계 ~30M+ 
 
 ---
 
-## Phase 12: 배치 비교
-
-2026-04-18 배치 (PCTY + RMD + PM + DECK) 비교 테이블 → `BATCH_2026-04-18_4종.md` 참조.
-
----
-
 ## Sources
 
 - [ResMed Q2 FY2026 Press Release](https://investor.resmed.com/news-events/press-releases/detail/416/resmed-inc-announces-results-for-the-second-quarter-of-fiscal-year-2026)
