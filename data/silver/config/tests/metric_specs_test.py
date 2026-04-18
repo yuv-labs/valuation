@@ -26,6 +26,8 @@ SCREENING_METRICS = [
     'CURRENT_LIABILITIES',
     'TOTAL_DEBT',
     'CASH',
+    'RD',
+    'DIVIDENDS_PAID',
 ]
 
 ORIGINAL_METRICS = ['CFO', 'CAPEX', 'SHARES']
@@ -99,3 +101,23 @@ class TestMetricExtractionFromRealData:
     for metric in ytd:
       assert METRIC_SPECS[metric]['is_ytd'] is True, (
           f'{metric} should be is_ytd')
+
+  def test_rd_extracted(self, extractor):
+    df = extractor.extract_facts(APPLE_COMPANYFACTS)
+    rd = df[df['metric'] == 'RD']
+    assert not rd.empty, 'RD not extracted from Apple'
+    annual = rd[rd['fp'] == 'FY']
+    if not annual.empty:
+      max_rd = annual['val'].max()
+      assert max_rd > 10_000_000_000, (
+          f'Apple FY R&D suspiciously low: {max_rd}')
+
+  def test_dividends_paid_extracted(self, extractor):
+    df = extractor.extract_facts(APPLE_COMPANYFACTS)
+    div = df[df['metric'] == 'DIVIDENDS_PAID']
+    assert not div.empty, 'DIVIDENDS_PAID not extracted from Apple'
+    annual = div[div['fp'] == 'FY']
+    if not annual.empty:
+      max_div = annual['val'].max()
+      assert max_div > 1_000_000_000, (
+          f'Apple FY dividends suspiciously low: {max_div}')

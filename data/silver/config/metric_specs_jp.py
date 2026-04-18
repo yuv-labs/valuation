@@ -275,4 +275,42 @@ METRIC_SPECS_JP: dict[str, dict] = {
         'is_ytd': False,
         'abs': False,
     },
+    'RD': {
+        'taxonomies': {
+            'jpcrp_cor': [
+                'ResearchAndDevelopmentExpensesSummaryOfBusinessResults',
+            ],
+            'jpigp_cor': [
+                'ResearchAndDevelopmentExpenseIFRS',
+            ],
+            'jppfs_cor': [
+                'ResearchAndDevelopmentCosts',
+            ],
+            'ifrs-full': [
+                'ResearchAndDevelopmentExpense',
+            ],
+        },
+        'unit': 'JPY',
+        'is_ytd': True,
+        'abs': False,
+    },
+    'DIVIDENDS_PAID': {
+        'taxonomies': {
+            'jpcrp_cor': [
+                'DividendPaidPerShareSummaryOfBusinessResults',
+            ],
+            'jpigp_cor': [
+                'DividendsPaidIFRS',
+            ],
+            'jppfs_cor': [
+                'CashDividendsPaidFinCF',
+            ],
+            'ifrs-full': [
+                'DividendsPaid',
+            ],
+        },
+        'unit': 'JPY',
+        'is_ytd': True,
+        'abs': True,
+    },
 }

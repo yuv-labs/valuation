@@ -21,4 +21,6 @@ METRIC_CATALOG: dict[str, dict] = {
     'CURRENT_LIABILITIES': {'is_ytd': False, 'abs': False},
     'TOTAL_DEBT': {'is_ytd': False, 'abs': False},
     'CASH': {'is_ytd': False, 'abs': False},
+    'RD': {'is_ytd': True, 'abs': False},
+    'DIVIDENDS_PAID': {'is_ytd': True, 'abs': True},
 }

@@ -116,4 +116,24 @@ METRIC_SPECS_KR = {
         'unit': 'KRW',
         'is_ytd': False,
     },
+    'RD': {
+        'sj_div': ['IS', 'CIS'],
+        'account_names': [
+            '연구개발비',
+            '경상연구개발비',
+            '연구 및 개발비',
+        ],
+        'unit': 'KRW',
+        'is_ytd': True,
+    },
+    'DIVIDENDS_PAID': {
+        'sj_div': ['CF'],
+        'account_names': [
+            '배당금의 지급',
+            '배당금지급',
+        ],
+        'unit': 'KRW',
+        'is_ytd': True,
+        'abs': True,
+    },
 }

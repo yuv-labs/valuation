@@ -23,6 +23,12 @@ DERIVED_RATIOS = [
     'fcf_yield',
     'op_margin',
     'gp_margin',
+    'roa',
+    'rd_to_revenue',
+    'cfo_to_ni_ratio',
+    'reinvestment_rate',
+    'has_dividend',
+    'debt_to_assets',
 ]
 
 # Rolling multi-year metrics.
@@ -34,6 +40,36 @@ ROLLING_METRICS = [
     'fcf_positive_3y',
     'fcf_ni_ratio_3y_avg',
     'revenue_cagr_3y',
+    'revenue_cagr_5y',
+    'roic_5y_avg',
+    'roic_5y_min',
+    'op_margin_trend_5y',
+    'reinvestment_rate_5y_avg',
+    'roic_trend',
+]
+
+# Track classification columns.
+TRACK_COLS = [
+    'axis_a_roic',
+    'axis_b_reinvest',
+    'axis_c_growth',
+    'track_signal',
+]
+
+# Trust test columns.
+TRUST_COLS = [
+    'trust_roe_pass',
+    'trust_roa_pass',
+    'trust_cfo_ni_pass',
+    'trust_dividend_exists',
+    'trust_score',
+]
+
+# Quant score columns.
+SCORE_COLS = [
+    'fisher_quant_score',
+    'buffett_quant_score',
+    'gate_pass',
 ]
 
 # Price-derived metrics.
@@ -154,3 +190,42 @@ class TestScreeningPanelBuilder:
       pytest.skip('No 52w high data')
     assert (vals <= 0.001).all(), (
         'pct_from_52w_high should be <= 0')
+
+  def test_has_track_columns(self):
+    for col in TRACK_COLS:
+      assert col in self.panel.columns, (
+          f'Missing track column: {col}')
+
+  def test_has_trust_columns(self):
+    for col in TRUST_COLS:
+      assert col in self.panel.columns, (
+          f'Missing trust column: {col}')
+
+  def test_has_score_columns(self):
+    for col in SCORE_COLS:
+      assert col in self.panel.columns, (
+          f'Missing score column: {col}')
+
+  def test_track_signal_values_valid(self):
+    vals = self.panel['track_signal'].dropna().unique()
+    valid = {'buffett', 'fisher', 'mixed'}
+    for v in vals:
+      assert v in valid, f'Invalid track_signal: {v}'
+
+  def test_trust_score_range(self):
+    vals = self.panel['trust_score'].dropna()
+    if len(vals) == 0:
+      pytest.skip('No trust_score data')
+    assert (vals >= 0).all() and (vals <= 4).all()
+
+  def test_fisher_quant_score_range(self):
+    vals = self.panel['fisher_quant_score'].dropna()
+    if len(vals) == 0:
+      pytest.skip('No fisher_quant_score data')
+    assert (vals >= 0).all() and (vals <= 22).all()
+
+  def test_buffett_quant_score_range(self):
+    vals = self.panel['buffett_quant_score'].dropna()
+    if len(vals) == 0:
+      pytest.skip('No buffett_quant_score data')
+    assert (vals >= 0).all() and (vals <= 22).all()
