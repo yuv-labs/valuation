@@ -1,6 +1,6 @@
 # Unified Shallow Dive Playbook (Buffett + Fisher)
 
-한 기업에 대해 **Deep Dive 진입 여부 + 트랙 배정(Buffett형 / Fisher형)** 을 1~2시간 내 판정한다.
+한 기업(단건) 또는 3~5개 배치에 대해 **Deep Dive 진입 여부 + 트랙 배정(Buffett형 / Fisher형)** 을 1~2시간 내 판정한다.
 
 **Shallow인 이유**: 훌륭함을 확신하려는 게 아니라 **(a) Deep Dive에 1~2주를 투자할 가치가 있는가** + **(b) 어느 트랙의 Deep이 적합한가**를 판정. 확신 형성(형용사 누적 · DCF 정밀화)은 해당 트랙의 Deep에서.
 
@@ -17,13 +17,22 @@
 2. **Phase 9는 Track 판정.** `playbook/fisher/PHILOSOPHY.md:197-203`의 "해자 완성 vs 형성" 원칙을 4축 객관 지표로 구현. Valuation보다 **앞**에 배치 (판정이 valuation 방법론 분기).
 3. **Phase 10은 Track 분기 Valuation (필수).** Buffett → 간이 3시나리오 DCF (EPS×PER) / Fisher → 간이 3시나리오 ROE×PBR 복리 CAGR. r = 10% 고정. Risk·Opp 강제 매핑으로 정성을 정량으로.
 4. **Phase 11은 Deep 진입 판단.** 확신도 낮으면 Deep 진입 금지 (Fisher 계승). Phase 10 정량 결과가 보조 입력.
+5. **Phase 12는 배치 모드 전용.** 3~5개 동시 Shallow 시 상대 비교. 트랙별 클러스터링 + 정량 축 포함.
 
 ---
 
-## 실행
+## 실행 모드
+
+| 모드 | 용도 | Phase 구성 |
+| ------ | ------ | ---------- |
+| **단건** (기본) | 한 기업만 판단 / 첫 실행 경험 쌓기 | Phase 0~11 (Phase 12 skip) |
+| **배치** (3~5개 병렬) | Sensing 풀이 쌓여 월 1~2회 세션 | Phase 0~12 전부 |
+
+입력 티커 수로 자연 분기. 호출 예시:
 
 ```text
-"playbook/SHALLOW_DIVE.md를 읽고 {TICKER}에 대해 Shallow Dive를 실행해줘."
+단건:  "playbook/SHALLOW_DIVE.md를 읽고 {TICKER}에 대해 Shallow Dive를 실행해줘."
+배치:  "playbook/SHALLOW_DIVE.md를 읽고 {T1}, {T2}, {T3}에 대해 Shallow Dive 배치를 실행해줘."
 ```
 
 ---
@@ -50,7 +59,7 @@
 
 ## Phase 0: 데이터 수집
 
-**입력**: 대상 티커
+**입력**: 대상 티커 목록 (1개 또는 3~5개)
 **산출**: Gold 패널에 대상 티커 적재
 
 ### 한국 주식 (KR)
@@ -554,7 +563,8 @@ PV = 10년 후 가격 / 1.10^10
 
 | 결과 | 조건 | 다음 행동 |
 | ------ | ------ | ---------- |
-| **Deep Dive 진입** | 유니버스 PASS + 2분 테스트 명료 + 정량 5개 PASS ≥ 3 + Track Gate 확신도 ≥ 중간 + **Phase 10 가격 축 장애 없음** (10-B Bull CAGR ≥ 4% or 10-A Bull PV 현재가 근처 이상) | 배정된 트랙 Deep 착수 (동시 Deep 2~4개 한도) |
+| **Deep Dive 진입** | 유니버스 PASS + 2분 테스트 명료 + 정량 5개 PASS ≥ 3 + Track Gate 확신도 ≥ 중간 + **Phase 10 가격 축 장애 없음** (10-B Bull CAGR ≥ 4% or 10-A Bull PV 현재가 근처 이상) + (배치면 상대 우위 명확) | 배정된 트랙 Deep 착수 (동시 Deep 2~4개 한도) |
+| **Keep** (배치 모드 한정) | 매력적이나 Deep 우선순위 아직 — 다음 배치에서 신규 후보와 상대 비교하면 판단 날카로움. Phase 10 결과가 Base ≈ 현재가 회색 구간인 경우 포함 | 다음 Shallow Batch 자동 포함 |
 | **Parking Lot** | 분기 재방문이 맞음 — 외부 이벤트 대기(신제품·규제·사이클 저점) | 분기 리뷰 세션 |
 | **탈락** | 유니버스 FAIL / 2분 테스트 실패 / Phase 9 "미정" + 확신도 낮음 / **Phase 10-B Bull CAGR < 4% 매수 금지 trigger** / 명확한 결격 | Sensing 로그에서 제거 고려 |
 
@@ -566,6 +576,8 @@ PV = 10년 후 가격 / 1.10^10
 | 중간 | 방향은 있으나 일부 축 불확실 — Deep 중 재확인 필요 |
 | 낮음 | 왜 이 가격·왜 이 트랙인지 충분히 설명 불가 → **Deep 진입 금지** |
 
+**단건 모드의 Keep 주의**: 단건은 비교 대상 없으므로 Keep의 원래 효용(상대 비교)이 없음. 단건에서 Keep은 **"다음 배치 예약"** 예약 개념. 권고: 단건은 3갈래(Deep / Parking / 탈락).
+
 ### 과신 점검 (Overconfidence Check)
 
 `knowledge/가치평가_본질.md` 참조. 결론 전 자문:
@@ -576,6 +588,48 @@ PV = 10년 후 가격 / 1.10^10
 - 현재가 > Bull IV × 2 → "내가 성장 동력을 과소평가"가 더 유력
 - PBR < 1인 수익성 기업에서 시장 할인 이유를 설명 못 하면 판정 보류
 - Track Gate 4축이 2:2인데 "이 트랙일 것 같다" 직감으로 배정하면 **미정 플래그 유지**
+
+---
+
+## Phase 12: 배치 비교 테이블 (배치 모드 전용)
+
+**실행 조건**: 티커 2개 이상. 단건 모드 skip.
+
+**입력**: 배치 내 모든 기업의 Phase 1~11 산출물
+**산출**: 트랙별 비교 테이블 2개 (Buffett 그룹 / Fisher 그룹)
+
+### 공통 축
+
+| 기업 | 사업모델 1줄 | 경영진 재직 | ROIC 5년 | 해자/성장 가설 | **트랙 배정** | 정량 5개 PASS | Deep 진입 추천 | 확신도 |
+| ------ | ------------- | ------------- | ---------- | --------------- | :---: | :---: | :---: | :---: |
+| | | | | | 버핏/피셔/미정 | /5 | | |
+
+### Buffett 그룹 — 정량 축 (Phase 10-A 결과)
+
+| 기업 | 확률가중 PV | 현재가 | 현재가/PV | Bear/현재가 | Bull/현재가 | 가격 매력 순위 |
+| --- | --- | --- | --- | --- | --- | :---: |
+
+- **현재가/PV**: 낮을수록 저평가 (100% 미만 = PV > 현재가)
+- **Bear/현재가 > 100%**: 극단 저가 신호
+- **Bull/현재가 < 100%**: 과신 경고
+
+### Fisher 그룹 — 정량 축 (Phase 10-B 결과)
+
+| 기업 | Bull CAGR | Base CAGR | Bear CAGR | 확률가중 CAGR | 매수 금지 trigger? | 가격 매력 순위 |
+| --- | --- | --- | --- | --- | :-: | :---: |
+
+- **Bull CAGR ≥ 10%**: 매수 가능 후보 (Deep 필수)
+- **Bull CAGR < 4%**: 매수 금지 trigger (피셔 원칙)
+- 확률가중 CAGR이 r=10% 상회 여부가 상대 순위 핵심
+
+### 미정 트랙 (Phase 10-A + 10-B 둘 다 수행한 기업)
+
+| 기업 | 10-A 확률가중 PV / 현재가 | 10-B 확률가중 CAGR | 프레임 간 이견 | 재분류 힌트 |
+| --- | --- | --- | --- | --- |
+
+두 방식 값이 크게 다르면 "터미널 PER 가정 vs PBR 수렴 가정"의 이견 → Phase 9 재검토.
+
+비교 테이블이 단독 리포트보다 정보 많음 — 상대 우위가 드러남. 특히 **같은 트랙 내 Deep 우선순위**가 정량으로 명료화.
 
 ---
 
@@ -605,6 +659,7 @@ scenario_cagr_weighted: 0.07    # Fisher 배정 시 (확률가중 CAGR)
 # {회사명}({TICKER}) Shallow Dive — {날짜}
 
 기준일: {날짜} | 데이터: {출처} | 주가: {현재가} ({날짜})
+실행 모드: {단건 / 배치 세션 YYYY-MM-DD}
 
 ## 1. 유니버스 하한선 (Phase 1)
 ## 2. 2분 테스트 + 사업모델 (Phase 2)
@@ -624,6 +679,7 @@ scenario_cagr_weighted: 0.07    # Fisher 배정 시 (확률가중 CAGR)
   ### 10-B. Fisher 기대 CAGR (ROE×PBR) — 피셔 배정 시
   ### 10-C. Trigger 신호
 ## 11. Deep 진입 결정 + 확신도 (Phase 11)
+## 12. (배치 모드) 배치 비교 코멘트 (Phase 12)
 ```
 
 ---
@@ -637,10 +693,11 @@ scenario_cagr_weighted: 0.07    # Fisher 배정 시 (확률가중 CAGR)
 5. **Phase 10은 Track 분기 필수** — Buffett 10-A (DCF) / Fisher 10-B (ROE×PBR) / 미정 둘 다. r=10% 고정.
 6. **Phase 10은 판정 아닌 감지** — 단 10-B Bull CAGR < 4% **매수 금지 trigger**만 예외 (피셔 원칙).
 7. **Phase 9는 객관 4축** — 직감이 아닌 지표. 2:2 혼재면 "미정" 유지
-8. **확신도 낮음 = Deep 진입 금지** — Parking 또는 탈락
-9. **buyback 집약 기업의 ROE 왜곡 주의** — Phase 3·7·10-B에서 ROIC + EV/IC 변형 사용
-10. **Sensing 오염 금지** — Shallow 결과가 Sensing 로그의 기록 방식을 바꾸지 않도록
-11. **AI 협업의 1~2시간 compression을 확신 형성으로 착각하지 말 것** — 본격 확신은 Deep + 숙성기
+8. **배치 > 단건** — 비교의 이점은 Deep 우선순위 판단에 날카로움. 단건에서 Keep은 실질 Parking-like
+9. **확신도 낮음 = Deep 진입 금지** — Parking 또는 탈락
+10. **buyback 집약 기업의 ROE 왜곡 주의** — Phase 3·7·10-B에서 ROIC + EV/IC 변형 사용
+11. **Sensing 오염 금지** — Shallow 결과가 Sensing 로그의 기록 방식을 바꾸지 않도록
+12. **AI 협업의 1~2시간 compression을 확신 형성으로 착각하지 말 것** — 본격 확신은 Deep + 숙성기
 
 ---
 
@@ -672,3 +729,4 @@ scenario_cagr_weighted: 0.07    # Fisher 배정 시 (확률가중 CAGR)
   - **Phase 9·10 번호 교체**: Track Gate가 Phase 9(앞), 간이 Valuation이 Phase 10(뒤). v1에서 조건부 Valuation이 Track Gate 앞에 있을 때 agent skip 유혹 → Buffett 배정된 PM·RMD도 DCF 결측된 문제 구조적 해결.
   - **Phase 10 Track 분기**: 버핏 → 10-A (EPS×PER DCF) / 피셔 → 10-B (ROE×PBR 복리 CAGR) / 미정 → 둘 다. r = 10% 고정. 프레임 일치 (해자 완성 → 현금흐름 / 해자 형성 → book 복리).
   - **Phase 8 확장**: 기회 톱3 테이블 신설. Phase 10 시나리오 변수 강제 매핑 재료.
+  - **Phase 12 확장**: 트랙별 정량 축 컬럼 2종 (Buffett: 확률가중 PV/현재가 / Fisher: Bull·Base CAGR).
