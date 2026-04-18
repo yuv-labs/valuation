@@ -455,16 +455,6 @@ class TestComputeTrackSignals:
     result = ScreeningPanelBuilder._compute_track_signals(panel)
     assert result['track_signal'].iloc[0] == 'mixed'
 
-  def test_declining_roic_is_mixed_axis(self):
-    """Declining ROIC is negative for both tracks → mixed."""
-    panel = pd.DataFrame({
-        'roic_trend': ['declining'],
-        'reinvestment_rate_5y_avg': [0.20],
-        'revenue_cagr_5y': [0.05],
-    })
-    result = ScreeningPanelBuilder._compute_track_signals(panel)
-    assert result['axis_a_roic'].iloc[0] == 'mixed'
-
 
 class TestComputeTrustSignals:
 

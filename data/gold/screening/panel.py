@@ -622,6 +622,18 @@ class ScreeningPanelBuilder(BasePanelBuilder):
       'op_margin_trend_5y': (-0.001, 0.001, 2),
       'cfo_to_ni_ratio': (0.5, 1.0, 2),
   }
+  _FISHER_MAX = sum(2 * w for _, _, w in _FISHER_TIERS.values())
+
+  # Buffett tier thresholds.
+  _BUFFETT_TIERS = {
+      'fcf_yield': (0.03, 0.07, 3),
+      'fcf_positive_3y': (0.5, 1.0, 2),
+      'shares_5y_change': (0.01, -0.01, 2),
+      'roic': (0.10, 0.25, 3),
+      'debt_to_assets': (0.50, 0.30, 1),
+  }
+  _BUFFETT_MAX = sum(2 * w for _, _, w in _BUFFETT_TIERS.values())
+
   @staticmethod
   def _compute_track_signals(
       panel: pd.DataFrame,
@@ -632,11 +644,7 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     def _axis_a(trend):
       if pd.isna(trend):
         return pd.NA
-      if trend == 'rising':
-        return 'fisher'
-      if trend == 'stable':
-        return 'buffett'
-      return 'mixed'
+      return 'fisher' if trend == 'rising' else 'buffett'
 
     def _axis_bc(val, lo, hi):
       if pd.isna(val):
@@ -714,24 +722,21 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     return df
 
   @staticmethod
-  def _vec_tier(col: pd.Series, lo: float, hi: float,
-                weight: int, inverted: bool = False,
-                ) -> pd.Series:
-    """Vectorized 0/1/2 tier scoring."""
-    result = pd.Series(0, index=col.index)
-    notna = col.notna()
+  def _tier_score(val, lo, hi, weight, inverted=False):
+    """Score a value as 0/1/2 tier × weight."""
+    if pd.isna(val):
+      return 0
     if inverted:
-      result[notna] = (
-          ((col[notna] <= hi).astype(int) * 2
-           + ((col[notna] > hi)
-              & (col[notna] <= lo)).astype(int))
-          * weight)
-    else:
-      result[notna] = (
-          ((col[notna] >= hi).astype(int) * 2
-           + ((col[notna] >= lo) & (col[notna] < hi)).astype(int))
-          * weight)
-    return result
+      if val <= hi:
+        return 2 * weight
+      if val <= lo:
+        return 1 * weight
+      return 0
+    if val >= hi:
+      return 2 * weight
+    if val >= lo:
+      return 1 * weight
+    return 0
 
   @staticmethod
   def _compute_quant_scores(
@@ -739,44 +744,41 @@ class ScreeningPanelBuilder(BasePanelBuilder):
   ) -> pd.DataFrame:
     """Compute Fisher and Buffett tier-weighted scores."""
     df = panel.copy()
-    vt = ScreeningPanelBuilder._vec_tier
+    ts = ScreeningPanelBuilder._tier_score
 
-    # Fisher score (vectorized)
-    fisher = pd.Series(0, index=df.index)
-    for col, (lo, hi, w) in (
-        ScreeningPanelBuilder._FISHER_TIERS.items()):
-      s = df.get(col, pd.Series(pd.NA, index=df.index))
-      fisher = fisher + vt(s, lo, hi, w)
-    df['fisher_quant_score'] = fisher.astype(int)
+    # Fisher score
+    fisher_scores = []
+    for _, row in df.iterrows():
+      s = 0
+      for col, (lo, hi, w) in (
+          ScreeningPanelBuilder._FISHER_TIERS.items()):
+        s += ts(row.get(col), lo, hi, w)
+      fisher_scores.append(s)
+    df['fisher_quant_score'] = fisher_scores
 
-    # Buffett score (vectorized)
-    buffett = pd.Series(0, index=df.index)
-
-    fcf_y = df.get(
-        'fcf_yield', pd.Series(pd.NA, index=df.index))
-    buffett = buffett + vt(fcf_y, 0.03, 0.07, 3)
-
-    fcf_pos = df.get(
-        'fcf_positive_3y',
-        pd.Series(pd.NA, index=df.index))
-    fcf_float = fcf_pos.map(
-        lambda v: 1.0 if v is True else (
-            0.0 if v is False else pd.NA))
-    buffett = buffett + vt(fcf_float, 0.5, 1.0, 2)
-
-    shares_chg = df.get(
-        'shares_5y_change', pd.Series(pd.NA, index=df.index))
-    buffett = buffett + vt(
-        shares_chg, 0.01, -0.01, 2, inverted=True)
-
-    roic = df.get('roic', pd.Series(pd.NA, index=df.index))
-    buffett = buffett + vt(roic, 0.10, 0.25, 3)
-
-    d2a = df.get(
-        'debt_to_assets', pd.Series(pd.NA, index=df.index))
-    buffett = buffett + vt(d2a, 0.50, 0.30, 1, inverted=True)
-
-    df['buffett_quant_score'] = buffett.astype(int)
+    # Buffett score
+    buffett_scores = []
+    for _, row in df.iterrows():
+      s = 0
+      # fcf_yield: higher is better
+      s += ts(row.get('fcf_yield'), 0.03, 0.07, 3)
+      # fcf_positive_3y: True=1.0, False=0.0
+      fcf_pos = row.get('fcf_positive_3y')
+      if pd.isna(fcf_pos) or fcf_pos is None:
+        fcf_val = 0.0
+      else:
+        fcf_val = 1.0 if fcf_pos else 0.0
+      s += ts(fcf_val, 0.5, 1.0, 2)
+      # shares_5y_change: lower (more negative) is better
+      s += ts(row.get('shares_5y_change'), 0.01, -0.01, 2,
+              inverted=True)
+      # roic: higher is better
+      s += ts(row.get('roic'), 0.10, 0.25, 3)
+      # debt_to_assets: lower is better
+      s += ts(row.get('debt_to_assets'), 0.50, 0.30, 1,
+              inverted=True)
+      buffett_scores.append(s)
+    df['buffett_quant_score'] = buffett_scores
 
     return df
 
