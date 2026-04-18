@@ -12,6 +12,7 @@ import pandas as pd
 from data.gold.config.schemas import VALUATION_PANEL_SCHEMA
 from data.gold.core.base import BasePanelBuilder
 from data.gold.transforms import calculate_market_cap
+from data.gold.transforms import join_prices_latest
 from data.gold.transforms import join_prices_pit
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ class ValuationPanelBuilder(BasePanelBuilder):
     panel = join_prices_pit(
         metrics_wide, prices, ticker_col='ticker')
     panel = calculate_market_cap(panel)
+    panel = join_prices_latest(panel, prices, ticker_col='ticker')
     panel = panel.drop(columns=['cik10'], errors='ignore')
 
     if self.min_date:

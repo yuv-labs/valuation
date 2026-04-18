@@ -64,6 +64,7 @@ for t in ALL_TICKERS:
     data = panel[panel['ticker'] == t]
     assert len(data) > 0, f"No data for {t}"
     assert data['revenue_ttm'].notna().any(), f"No revenue for {t}"
+    assert data['price_latest'].notna().any(), f"No latest price for {t}"
 ```
 
 If verification fails, report the error and stop.
@@ -86,6 +87,10 @@ Read the knowledge files it references from knowledge/ directory.
 Execute Phase 1 through Phase 11 for {TICKER} (market: {MARKET}).
 
 Gold data is already built at data/gold/out/valuation_panel.parquet.
+
+**Important — price columns**: The panel has two sets of price columns:
+- `price` / `date` / `market_cap`: PIT price at filing date (for historical analysis only).
+- `price_latest` / `date_latest` / `market_cap_latest`: Current market price. Use these for Phase 7+ valuation calculations.
 
 Save output to: research/shallow-dive/{TICKER}_{company_name}.md
 

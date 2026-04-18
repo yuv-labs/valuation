@@ -192,6 +192,18 @@ _COMMON_COLUMNS = [
                'float64',
                nullable=True,
                description='Market capitalization (shares * price)'),
+    ColumnSpec('date_latest',
+               'datetime64[ns]',
+               nullable=True,
+               description='Latest available price date from silver'),
+    ColumnSpec('price_latest',
+               'float64',
+               nullable=True,
+               description='Latest available closing price'),
+    ColumnSpec('market_cap_latest',
+               'float64',
+               nullable=True,
+               description='Market cap using latest price'),
 ]
 
 VALUATION_PANEL_SCHEMA = PanelSchema(
