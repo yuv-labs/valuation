@@ -9,32 +9,33 @@
 | 1 | `README.md` (이 파일) | 디렉토리 지도 | 첫 진입 |
 | 2 | `PHILOSOPHY.md` | 성장주 철학·합의 (왜 이렇게 설계했는가) | 프레임 흔들릴 때, 새 기업 판단 직전 |
 | 3 | `PIPELINE.md` | Sensing→Shallow→Deep→숙성기→편입→유지보수 뼈대 | 전체 프로세스 파악, 단계 연결 확인 |
-| 4 | `SHALLOW_DIVE.md` | Shallow 단계 실행 playbook (단건·배치) | Shallow 실행할 때 |
-| 5 | `DEEP_DIVE.md` | Deep 단계 실행 playbook (Stream A~F) | Deep 실행할 때 |
+| 4 | `../SHALLOW_DIVE.md` ⭐ | **통합 Shallow Dive playbook** (Buffett+Fisher 공통) | Shallow 실행할 때 |
+| ~~4'~~ | ~~`SHALLOW_DIVE.md`~~ | ~~Fisher 전용 Shallow~~ — **2026-04-18 DEPRECATED**, legacy 참조용 | 기존 ONON/IDXX shallow 해석 시만 |
+| 5 | `DEEP_DIVE.md` | Deep 단계 실행 playbook (Stream A~F) | Fisher형 배정 종목 Deep 실행할 때 |
 
 ## AI 세션 진입점
 
 - **전체 맥락 필요**: `README.md` → `PHILOSOPHY.md` → `PIPELINE.md` 순 로드
-- **Shallow 실행**: `PHILOSOPHY.md` + `SHALLOW_DIVE.md` (+ 해당 기업 Sensing 엔트리)
-- **Deep 실행**: `PHILOSOPHY.md` + `DEEP_DIVE.md` + 해당 기업 Shallow 리포트
+- **Shallow 실행**: `../SHALLOW_DIVE.md` (통합) + `PHILOSOPHY.md`(필요시) + 해당 기업 Sensing 엔트리. Phase 10 Track Gate에서 Fisher형 배정 시만 본 디렉토리의 Deep playbook 진입
+- **Deep 실행 (Fisher형 배정 종목)**: `PHILOSOPHY.md` + `DEEP_DIVE.md` + 해당 기업 Shallow 리포트
 - **Deep의 특정 Stream만**: `DEEP_DIVE.md` 해당 Stream 섹션 + 선행 Stream 출력물
 
 ## 전체 파이프라인 한눈에
 
 ```text
-Sensing  →  Shallow Dive  →  Deep Dive  →  숙성기  →  편입  →  유지보수
-(평생)      1~2h·단건/배치    1~2주 집중    2~4주     분할매수   분기
- ↓             ↓                ↓             ↓         ↓          ↓
-SENSING_LOG   research/        research/    Deep 내     가격아닌  research/
- (공통)        fisher/          fisher/      Stream E    해자체크   fisher/
-               shallow-dive/    deep-dive/                          deep-dive/
-                                                                    {ticker}_
-                                                                    monitoring.md
+Sensing  →  Shallow Dive  →  Track 배정  →  Deep Dive  →  숙성기  →  편입  →  유지보수
+(평생)      1~2h·단건/배치    Phase 10      1~2주 집중    2~4주     분할매수   분기
+ ↓             ↓                ↓             ↓             ↓         ↓          ↓
+SENSING_LOG   research/       Buffett형     research/    Deep 내     가격아닌  research/
+ (공통)        shallow-dive/  vs Fisher형   fisher/       Stream E    해자체크  fisher/
+               (통합 NEW)                    deep-dive/                          deep-dive/
+                                             (피셔 배정시)                       {ticker}_
+                                                                                  monitoring.md
 ```
 
-- **Sensing 로그는 버핏·피셔 공통** (`../../research/SENSING_LOG.md`)
-- **Shallow 이후는 피셔 전용 경로** (`research/fisher/shallow-dive/`, `research/fisher/deep-dive/`)
-- 프레임 배정은 Shallow Phase 1에서 최종 확정, Deep은 한 프레임으로만
+- **Sensing 로그 + Shallow는 버핏·피셔 공통** (`../../research/SENSING_LOG.md`, `../../research/shallow-dive/`)
+- **Deep 이후는 트랙별 분리 경로** (`research/{buffett|fisher}/deep-dive/`)
+- **프레임 배정은 통합 Shallow Phase 10에서 4축 판정** (`../SHALLOW_DIVE.md` Phase 10), Deep은 한 프레임으로만
 
 ## 핵심 원칙 요약
 

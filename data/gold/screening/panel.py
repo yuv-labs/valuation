@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Metrics we need for screening ratios.
 _TTM_METRICS = [
     'REVENUE', 'NET_INCOME', 'EBIT', 'GROSS_PROFIT',
-    'CFO', 'CAPEX',
+    'CFO', 'CAPEX', 'RD', 'DIVIDENDS_PAID',
 ]
 _POINT_IN_TIME_METRICS = [
     'TOTAL_EQUITY', 'TOTAL_ASSETS', 'CURRENT_LIABILITIES',
@@ -122,6 +122,12 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     # Rolling metrics require deduplicated, sorted history.
     panel = self._compute_rolling_metrics(panel)
     panel = self._compute_price_metrics(panel, prices)
+
+    # Track classification + trust + quant scores + gates.
+    panel = self._compute_track_signals(panel)
+    panel = self._compute_trust_signals(panel)
+    panel = self._compute_quant_scores(panel)
+    panel = self._apply_gates(panel)
 
     self.panel = panel
     return self.panel
@@ -337,6 +343,48 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     else:
       df['gp_margin'] = pd.NA
 
+    # ROA = net_income_ttm / total_assets
+    if ni is not None and assets is not None:
+      df['roa'] = ni / assets.replace(0, pd.NA)
+    else:
+      df['roa'] = pd.NA
+
+    # R&D to revenue
+    rd = df.get('rd_ttm')
+    if rd is not None and revenue is not None:
+      df['rd_to_revenue'] = rd / revenue.replace(0, pd.NA)
+    else:
+      df['rd_to_revenue'] = pd.NA
+
+    # CFO to NI ratio
+    if cfo is not None and ni is not None:
+      df['cfo_to_ni_ratio'] = cfo / ni.replace(0, pd.NA)
+    else:
+      df['cfo_to_ni_ratio'] = pd.NA
+
+    # Reinvestment rate = (capex + R&D) / CFO
+    if capex is not None and cfo is not None:
+      reinvest_num = capex.copy()
+      if rd is not None:
+        reinvest_num = reinvest_num + rd.fillna(0)
+      df['reinvestment_rate'] = (
+          reinvest_num / cfo.replace(0, pd.NA))
+    else:
+      df['reinvestment_rate'] = pd.NA
+
+    # Has dividend
+    div = df.get('dividends_paid_ttm')
+    if div is not None:
+      df['has_dividend'] = div > 0
+    else:
+      df['has_dividend'] = False
+
+    # Debt to assets
+    if debt is not None and assets is not None:
+      df['debt_to_assets'] = debt / assets.replace(0, pd.NA)
+    else:
+      df['debt_to_assets'] = pd.NA
+
     return df
 
   @staticmethod
@@ -405,6 +453,64 @@ class ScreeningPanelBuilder(BasePanelBuilder):
         (revenue_annual / revenue_3y_ago.replace(0, pd.NA))
         ** (1 / 3) - 1)
 
+    # --- 5-year rolling metrics ---
+
+    # ROIC 5Y avg and min
+    roic_5y_avg = grouped['roic'].transform(
+        lambda s: s.rolling(5, min_periods=5).mean())
+    roic_5y_min = grouped['roic'].transform(
+        lambda s: s.rolling(5, min_periods=5).min())
+
+    # Revenue CAGR 5Y
+    revenue_5y_ago = revenue_annual.groupby('ticker').shift(5)
+    revenue_cagr_5y = (
+        (revenue_annual / revenue_5y_ago.replace(0, pd.NA))
+        ** (1 / 5) - 1)
+
+    # Op margin trend 5Y: (current - 5y_ago) / 5
+    op_margin_col = annual.get('op_margin')
+    if op_margin_col is not None:
+      op_5y_ago = op_margin_col.groupby('ticker').shift(5)
+      op_margin_trend_5y = (op_margin_col - op_5y_ago) / 5
+    else:
+      op_margin_trend_5y = pd.Series(
+          pd.NA, index=annual.index)
+
+    # Reinvestment rate 5Y avg
+    reinvest_col = annual.get('reinvestment_rate')
+    if reinvest_col is not None:
+      reinvestment_rate_5y_avg = reinvest_col.groupby(
+          'ticker').transform(
+          lambda s: s.rolling(5, min_periods=3).mean())
+    else:
+      reinvestment_rate_5y_avg = pd.Series(
+          pd.NA, index=annual.index)
+
+    # Shares 5Y change
+    shares_col = annual.get('shares_q')
+    if shares_col is not None:
+      shares_5y_ago = shares_col.groupby('ticker').shift(5)
+      shares_5y_change = (
+          (shares_col / shares_5y_ago.replace(0, pd.NA)) - 1)
+    else:
+      shares_5y_change = pd.Series(pd.NA, index=annual.index)
+
+    # ROIC trend: rising / stable / declining
+    def _roic_trend(current, avg_5y):
+      if pd.isna(current) or pd.isna(avg_5y) or avg_5y == 0:
+        return pd.NA
+      ratio = current / avg_5y
+      if ratio > 1.1:
+        return 'rising'
+      if ratio < 0.9:
+        return 'declining'
+      return 'stable'
+
+    roic_trend = pd.Series(
+        [_roic_trend(c, a) for c, a in zip(
+            annual['roic'], roic_5y_avg)],
+        index=annual.index)
+
     # Assign back to annual index.
     annual['roic_3y_avg'] = roic_3y_avg
     annual['roic_3y_min'] = roic_3y_min
@@ -413,12 +519,22 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     annual['fcf_positive_3y'] = fcf_positive_3y.astype('boolean')
     annual['fcf_ni_ratio_3y_avg'] = fcf_ni_ratio_3y_avg
     annual['revenue_cagr_3y'] = revenue_cagr_3y
+    annual['roic_5y_avg'] = roic_5y_avg
+    annual['roic_5y_min'] = roic_5y_min
+    annual['revenue_cagr_5y'] = revenue_cagr_5y
+    annual['op_margin_trend_5y'] = op_margin_trend_5y
+    annual['reinvestment_rate_5y_avg'] = reinvestment_rate_5y_avg
+    annual['shares_5y_change'] = shares_5y_change
+    annual['roic_trend'] = roic_trend
 
     # Map annual rolling metrics back to all panel rows.
     rolling_cols = [
         'roic_3y_avg', 'roic_3y_min', 'gp_margin_std_3y',
         'pe_avg_5y', 'fcf_positive_3y', 'fcf_ni_ratio_3y_avg',
         'revenue_cagr_3y',
+        'roic_5y_avg', 'roic_5y_min', 'revenue_cagr_5y',
+        'op_margin_trend_5y', 'reinvestment_rate_5y_avg',
+        'shares_5y_change', 'roic_trend',
     ]
     rolling_lookup = annual[rolling_cols].reset_index()
     df = df.merge(
@@ -489,4 +605,211 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     df = df.drop(
         columns=['_max_end', '_52w_high', '_latest_close'],
         errors='ignore')
+    return df
+
+  # ── Track classification thresholds (tunable) ──────────────
+
+  _REINVEST_BUFFETT = 0.30
+  _REINVEST_FISHER = 0.50
+  _CAGR_BUFFETT = 0.08
+  _CAGR_FISHER = 0.15
+
+  # Fisher tier thresholds: (low, high) boundaries for 0/1/2.
+  _FISHER_TIERS = {
+      'revenue_cagr_5y': (0.05, 0.15, 3),
+      'rd_to_revenue': (0.0, 0.05, 1),
+      'op_margin': (0.05, 0.15, 3),
+      'op_margin_trend_5y': (-0.001, 0.001, 2),
+      'cfo_to_ni_ratio': (0.5, 1.0, 2),
+  }
+  @staticmethod
+  def _compute_track_signals(
+      panel: pd.DataFrame,
+  ) -> pd.DataFrame:
+    """Assign buffett / fisher / mixed track label."""
+    df = panel.copy()
+
+    def _axis_a(trend):
+      if pd.isna(trend):
+        return pd.NA
+      if trend == 'rising':
+        return 'fisher'
+      if trend == 'stable':
+        return 'buffett'
+      return 'mixed'
+
+    def _axis_bc(val, lo, hi):
+      if pd.isna(val):
+        return pd.NA
+      if val < lo:
+        return 'buffett'
+      if val > hi:
+        return 'fisher'
+      return 'mixed'
+
+    df['axis_a_roic'] = df.get(
+        'roic_trend', pd.Series(pd.NA, index=df.index)).map(
+        _axis_a)
+
+    reinvest = df.get(
+        'reinvestment_rate_5y_avg',
+        pd.Series(pd.NA, index=df.index))
+    df['axis_b_reinvest'] = reinvest.apply(
+        lambda v: _axis_bc(
+            v,
+            ScreeningPanelBuilder._REINVEST_BUFFETT,
+            ScreeningPanelBuilder._REINVEST_FISHER))
+
+    cagr = df.get(
+        'revenue_cagr_5y',
+        pd.Series(pd.NA, index=df.index))
+    df['axis_c_growth'] = cagr.apply(
+        lambda v: _axis_bc(
+            v,
+            ScreeningPanelBuilder._CAGR_BUFFETT,
+            ScreeningPanelBuilder._CAGR_FISHER))
+
+    def _composite(row):
+      axes = [row.get('axis_a_roic'),
+              row.get('axis_b_reinvest'),
+              row.get('axis_c_growth')]
+      axes = [a for a in axes if not pd.isna(a)]
+      if not axes:
+        return pd.NA
+      n_b = sum(1 for a in axes if a == 'buffett')
+      n_f = sum(1 for a in axes if a == 'fisher')
+      if n_b >= 2 and n_f == 0:
+        return 'buffett'
+      if n_f >= 2 and n_b == 0:
+        return 'fisher'
+      return 'mixed'
+
+    df['track_signal'] = df.apply(_composite, axis=1)
+    return df
+
+  @staticmethod
+  def _compute_trust_signals(
+      panel: pd.DataFrame,
+  ) -> pd.DataFrame:
+    """Compute 1-minute trust test scores."""
+    df = panel.copy()
+    roe = df.get('roe', pd.Series(pd.NA, index=df.index))
+    roa = df.get('roa', pd.Series(pd.NA, index=df.index))
+    cfo_ni = df.get(
+        'cfo_to_ni_ratio', pd.Series(pd.NA, index=df.index))
+    has_div = df.get(
+        'has_dividend', pd.Series(False, index=df.index))
+
+    df['trust_roe_pass'] = (roe >= 0.10).fillna(False)
+    df['trust_roa_pass'] = (roa >= 0.07).fillna(False)
+    df['trust_cfo_ni_pass'] = (cfo_ni >= 0.8).fillna(False)
+    df['trust_dividend_exists'] = has_div.fillna(False)
+
+    df['trust_score'] = (
+        df['trust_roe_pass'].astype('int64')
+        + df['trust_roa_pass'].astype('int64')
+        + df['trust_cfo_ni_pass'].astype('int64')
+        + df['trust_dividend_exists'].astype('int64'))
+
+    return df
+
+  @staticmethod
+  def _vec_tier(col: pd.Series, lo: float, hi: float,
+                weight: int, inverted: bool = False,
+                ) -> pd.Series:
+    """Vectorized 0/1/2 tier scoring."""
+    result = pd.Series(0, index=col.index)
+    notna = col.notna()
+    if inverted:
+      result[notna] = (
+          ((col[notna] <= hi).astype(int) * 2
+           + ((col[notna] > hi)
+              & (col[notna] <= lo)).astype(int))
+          * weight)
+    else:
+      result[notna] = (
+          ((col[notna] >= hi).astype(int) * 2
+           + ((col[notna] >= lo) & (col[notna] < hi)).astype(int))
+          * weight)
+    return result
+
+  @staticmethod
+  def _compute_quant_scores(
+      panel: pd.DataFrame,
+  ) -> pd.DataFrame:
+    """Compute Fisher and Buffett tier-weighted scores."""
+    df = panel.copy()
+    vt = ScreeningPanelBuilder._vec_tier
+
+    # Fisher score (vectorized)
+    fisher = pd.Series(0, index=df.index)
+    for col, (lo, hi, w) in (
+        ScreeningPanelBuilder._FISHER_TIERS.items()):
+      s = df.get(col, pd.Series(pd.NA, index=df.index))
+      fisher = fisher + vt(s, lo, hi, w)
+    df['fisher_quant_score'] = fisher.astype(int)
+
+    # Buffett score (vectorized)
+    buffett = pd.Series(0, index=df.index)
+
+    fcf_y = df.get(
+        'fcf_yield', pd.Series(pd.NA, index=df.index))
+    buffett = buffett + vt(fcf_y, 0.03, 0.07, 3)
+
+    fcf_pos = df.get(
+        'fcf_positive_3y',
+        pd.Series(pd.NA, index=df.index))
+    fcf_float = fcf_pos.map(
+        lambda v: 1.0 if v is True else (
+            0.0 if v is False else pd.NA))
+    buffett = buffett + vt(fcf_float, 0.5, 1.0, 2)
+
+    shares_chg = df.get(
+        'shares_5y_change', pd.Series(pd.NA, index=df.index))
+    buffett = buffett + vt(
+        shares_chg, 0.01, -0.01, 2, inverted=True)
+
+    roic = df.get('roic', pd.Series(pd.NA, index=df.index))
+    buffett = buffett + vt(roic, 0.10, 0.25, 3)
+
+    d2a = df.get(
+        'debt_to_assets', pd.Series(pd.NA, index=df.index))
+    buffett = buffett + vt(d2a, 0.50, 0.30, 1, inverted=True)
+
+    df['buffett_quant_score'] = buffett.astype(int)
+
+    return df
+
+  @staticmethod
+  def _apply_gates(
+      panel: pd.DataFrame,
+  ) -> pd.DataFrame:
+    """Mark rows that pass/fail screening gates."""
+    df = panel.copy()
+
+    trust = df.get('trust_score', pd.Series(0, index=df.index))
+    d2a = df.get(
+        'debt_to_assets', pd.Series(pd.NA, index=df.index))
+
+    gate = pd.Series(True, index=df.index)
+
+    # Gate: trust_score >= 3
+    gate = gate & (trust >= 3)
+
+    # Gate: debt_to_assets <= 0.8
+    gate = gate & ((d2a <= 0.8) | d2a.isna())
+
+    # Gate: no consecutive ROIC negative (2 years)
+    if 'roic' in df.columns and 'ticker' in df.columns:
+      sorted_df = df.sort_values(['ticker', 'end'])
+      prev_roic = sorted_df.groupby('ticker')['roic'].shift(1)
+      consecutive_neg = (
+          (sorted_df['roic'] < 0) & (prev_roic < 0))
+      # Propagate: if any pair in ticker is consecutive neg,
+      # flag the latest row for that ticker.
+      tickers_with_consec = sorted_df.loc[
+          consecutive_neg, 'ticker'].unique()
+      gate = gate & ~df['ticker'].isin(tickers_with_consec)
+
+    df['gate_pass'] = gate
     return df

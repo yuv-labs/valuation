@@ -2,17 +2,19 @@
 
 판단 아닌 **기록**을 위한 장부. 평가 없이, 눈에 띄었다는 사실만 남긴다. 매일 1분 루틴. 1년 이상 쌓여야 패턴이 보인다 — 반복 등장 기업이 자연스럽게 위로 뜬다.
 
-**본 장부는 버핏형·피셔형 양쪽 dive 프로세스의 공통 entry point.** 프레임 배정은 Shallow Batch에서 확정되며, Sensing 단계에서는 "어떤 경로로 눈에 띄었는가"만 기록한다.
+**본 장부는 버핏형·피셔형 양쪽 dive 프로세스의 공통 entry point.** 프레임 배정은 **통합 Shallow Phase 10 Track Gate**에서 확정되며(2026-04-18~), Sensing 단계에서는 "어떤 경로로 눈에 띄었는가"만 기록한다.
 
 관련 문서:
 
-- `../playbook/buffett/SHALLOW_DIVE.md`, `../playbook/buffett/DEEP_DIVE.md` — 버핏 트랙
-- `../playbook/fisher/SHALLOW_DIVE.md`, `../playbook/fisher/DEEP_DIVE.md` — 피셔 트랙
-- `../playbook/fisher/EXPLORATION_PIPELINE.md` — 파이프라인 v2 합의 (Sensing → Shallow Batch → Deep → 숙성기 → 편입 → 유지보수) — ※ 임시 문서
+- **`../playbook/SHALLOW_DIVE.md` — 통합 Shallow Dive (Buffett+Fisher 공통, Phase 10 Track Gate 포함)**
+- `../playbook/buffett/DEEP_DIVE.md` — Buffett 트랙 Deep (Phase 10에서 버핏형 배정 시)
+- `../playbook/fisher/DEEP_DIVE.md` — Fisher 트랙 Deep (Phase 10에서 피셔형 배정 시)
+- `../playbook/{buffett,fisher}/SHALLOW_DIVE.md` — **legacy** (DEPRECATED 2026-04-18), 기존 산출물 참조용
+- `../playbook/fisher/EXPLORATION_PIPELINE.md` — 파이프라인 v2 합의 ※ 임시 문서
 
 ## 원칙
 
-1. **평가 없이 기록만** — "이 회사 좋아 보인다"까지만. 판단은 Shallow Batch에서
+1. **평가 없이 기록만** — "이 회사 좋아 보인다"까지만. 판단은 통합 Shallow에서 (Phase 10 Track Gate로 프레임 배정)
 2. **반복 등장 자체가 신호** — 같은 기업이 다시 눈에 띄면 **새 행으로 또 기록**. 중복 제거 금지. 반복 횟수가 곧 신호
 3. **매일 1분** — 길게 쓰지 말 것. 한 줄 인상 1~2문장이면 충분
 4. **가지치기 금지** — "너무 작아 보이니까 안 적어야지" 같은 Triage 유혹 차단. 유니버스 하한선 체크는 Shallow의 일
@@ -21,7 +23,7 @@
 
 ## 소싱 경로 약어
 
-각 경로는 버핏형/피셔형 발굴에 대한 **친화도가 다르다**. 같은 기업이라도 OBS로 눈에 띈 것과 SCR로 눈에 띈 것은 암시하는 프레임이 다름. 기록할 때 한 번 의식하면 나중에 Shallow 배치 구성할 때 편하다.
+각 경로는 버핏형/피셔형 발굴에 대한 **친화도가 다르다**. 같은 기업이라도 OBS로 눈에 띈 것과 SCR로 눈에 띈 것은 암시하는 프레임이 다름. 기록할 때 한 번 의식하면 나중에 Shallow 배치 구성과 Phase 10 Track Gate 해석에 편하다.
 
 | 약어 | 경로 | 친화 프레임 | 해설 |
 |------|------|-----------|------|
@@ -34,7 +36,7 @@
 | `NEW` | 뉴스 스캔 | 중립 (주의) | 실적 어닝·M&A·CEO 교체·규제 이슈는 **인지 계기**일 뿐 판단 자료 아님. 추세 추종·단기 매매 유발 위험이 있어 우선순위는 낮게 |
 | `COM` | 커뮤니티 신호 | 중립 (주의) | 레딧·스톡윗·종목토론. 99% 노이즈. "이런 회사가 있구나"의 입구로만 쓰고, 판단 자료로는 금지 |
 
-> **친화도는 경로가 암시하는 프레임 힌트이지 확정이 아니다.** 프레임 배정은 Shallow Batch의 Phase 1에서 최종 판단한다. 다만 Sensing 기록 시 "이 기업을 내가 어떤 각도로 봤는가"가 경로 선택에 자연스럽게 묻어나는 용도로 참고하면 된다.
+> **친화도는 경로가 암시하는 프레임 힌트이지 확정이 아니다.** 프레임 배정은 **통합 Shallow Phase 10 Track Gate의 4축 판정**(ROIC 추세 / 재투자율 / 매출 CAGR / 경영진 가이던스 성격)에서 최종 결정된다. 다만 Sensing 기록 시 "이 기업을 내가 어떤 각도로 봤는가"가 경로 선택에 자연스럽게 묻어나는 용도로 참고하면 된다.
 
 ## 기록 포맷
 
@@ -72,6 +74,7 @@
 | 2026-04-12 | Teradyne | TER | SCR | Track A 스크리닝 포착 (해자 유니버스 통과) |
 | 2026-04-12 | Align Technology | ALGN | SCR | Track A 스크리닝 포착 (해자 유니버스 통과) |
 | 2026-04-14 | On Holding | ONON | OBS | 러닝 취미로 접한 브랜드; 주변에서 체감되는 성장세. 30주 보유 중이나 충분히 좋은 주식인지 검증 필요 |
+| 2026-04-18 | IDEXX Laboratories | IDXX | REF+MAS | 수의진단 razor-blade compounder — SENSING 내 ALGN·VLTO와 구조 유사해 Fisher shallow 배치 비교 목적 |
 
 <!--
   새 항목은 위 테이블에 계속 행 추가. 연도·월 구분이 필요해지면 그때 섹션으로 쪼갤 것.

@@ -141,4 +141,25 @@ METRIC_SPECS = {
         'is_ytd': False,
         'abs': False,
     },
+    'RD': {
+        'namespace': 'us-gaap',
+        'tags': [
+            'ResearchAndDevelopmentExpense',
+            'ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost',
+        ],
+        'unit': 'USD',
+        'is_ytd': True,
+        'abs': False,
+    },
+    'DIVIDENDS_PAID': {
+        'namespace': 'us-gaap',
+        'tags': [
+            'PaymentsOfDividends',
+            'PaymentsOfDividendsCommonStock',
+            'PaymentsOfOrdinaryDividends',
+        ],
+        'unit': 'USD',
+        'is_ytd': True,
+        'abs': True,
+    },
 }
