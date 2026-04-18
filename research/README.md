@@ -17,6 +17,13 @@
 | [KMB](buffett/shallow-dive/KMB_Kimberly_Clark.md) | Kimberly-Clark | Buffett | Shallow | 🔍 분석중 | — | 2026-04-11 |
 | [000270.KS](buffett/shallow-dive/000270_기아.md) | 기아 | Buffett | Shallow | 🔍 분석중 | — | 2026-04-11 |
 | [005850.KS](buffett/shallow-dive/005850_에스엘.md) | 에스엘 | Buffett | Shallow | 🔍 분석중 | — | 2026-04-12 |
+| [8111.T](buffett/shallow-dive/8111_Goldwin.md) | Goldwin | Buffett | Shallow | 🔍 분석중 | TNF 영구 상표권 + ROIC 24% 자본 경량 모델, PER 12.7x 일본 디스카운트 | 2026-04-17 |
+| [TDC](buffett/shallow-dive/TDC_Teradata.md) | Teradata | Buffett | Shallow | 🔍 분석중 | 전환비용 해자의 depleting asset — P/FCF 8.9x 가치함정 vs 턴어라운드 | 2026-04-17 |
+| [AOS](buffett/shallow-dive/AOS_AO_Smith.md) | A.O. Smith | Buffett | Shallow | 🔍 분석중 | 북미 온수기 과점 + ROIC 31% 캐시카우, PER 16.4x 적정가 — Watchlist | 2026-04-17 |
+| [IDXX](buffett/shallow-dive/IDXX_IDEXX_Laboratories.md) | IDEXX Laboratories | Buffett | Shallow | 🔍 분석중 | 수의 진단 글로벌 1위, ROIC 44% 최상급 프랜차이즈이나 PER 44x — 품질 프리미엄 vs 고평가 딜레마 | 2026-04-17 |
+| [VLTO](buffett/shallow-dive/VLTO_Veralto.md) | Veralto | Buffett | Shallow | 🔍 분석중 | Danaher DNA 산업재 캐시카우, 사업 최상급이나 PER 24x 안전마진 부재 — Watchlist | 2026-04-17 |
+| [FTNT](buffett/shallow-dive/FTNT_Fortinet.md) | Fortinet | Buffett | Shallow | 🔍 분석중 | ROIC 58% See's급 프랜차이즈, ASIC 원가해자 최상급이나 PER 34x 낙관 가정 — Watchlist $55~65 | 2026-04-17 |
+| [ITT](buffett/shallow-dive/ITT_ITT_Inc.md) | ITT Inc. | Buffett | Shallow | 🔍 분석중 | 전환비용 해자 산업재 ROIC 21%, SPX FLOW $4.8B 인수로 PER 35x — 시너지 전제 고평가, Pro-forma 확인 후 재평가 | 2026-04-17 |
 | [192080.KS](192080-KS.md) | 더블유게임즈 | — | 단일 리포트 | 🔍 분석중 | 규제 오버행이 붙은 현금창출주 | 2026-03-30 |
 
 ## 상태 범례
