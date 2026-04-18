@@ -22,6 +22,7 @@ _ALL_COLS = [
     ('trust_score', 'Trust', 'num',
      '1분 신뢰성 테스트 (0-4). ROE, ROA, CFO/NI, 배당'),
     ('roic', 'ROIC', 'pct', 'ROIC = NOPAT / 투하자본'),
+    ('roic_5y_avg', 'ROIC 5Y', 'pct', 'ROIC 5년 평균'),
     ('roic_trend', 'Trend', 'trend', 'ROIC 5년 추세: rising / stable / declining'),
     ('revenue_cagr_5y', 'Rev 5Y', 'pct', '매출 5년 CAGR'),
     ('op_margin', 'OPM', 'pct', '영업이익률'),
