@@ -12,18 +12,28 @@ from data.bronze.providers.base import ProviderResult
 from data.bronze.update import _ensure_dir
 from data.bronze.update import _fetch_bytes
 from data.bronze.update import _is_fresh
+from data.bronze.update import _is_valid_stooq_csv
 from data.bronze.update import _save_if_needed
+from data.bronze.update import STOOQ_DAILY_CSV_URL_TMPL
+from data.bronze.update import STOOQ_DAILY_CSV_URL_TMPL_APIKEY
 
 if TYPE_CHECKING:
   from data.bronze.cache import BronzeCache
-
-STOOQ_DAILY_CSV_URL_TMPL = 'https://stooq.com/q/d/l/?s={symbol}&i=d'
 
 _CACHE_TTL_DAILY = 1
 
 
 class StooqProvider(BronzeProvider):
   """Fetches daily OHLCV CSV from Stooq."""
+
+  def __init__(
+      self,
+      *,
+      apikey: str | None = None,
+      subdir: str = 'stooq',
+  ) -> None:
+    self._apikey = apikey
+    self._subdir = subdir
 
   @property
   def name(self) -> str:
@@ -38,7 +48,7 @@ class StooqProvider(BronzeProvider):
       force: bool = False,
       cache: BronzeCache | None = None,
   ) -> ProviderResult:
-    stooq_dir = out_dir / 'stooq' / 'daily'
+    stooq_dir = out_dir / self._subdir / 'daily'
     _ensure_dir(stooq_dir)
 
     session = requests.Session()
@@ -52,14 +62,18 @@ class StooqProvider(BronzeProvider):
 
     for sym in tickers:
       sym_lower = sym.strip().lower()
-      url = STOOQ_DAILY_CSV_URL_TMPL.format(symbol=sym_lower)
+      if self._apikey:
+        url = STOOQ_DAILY_CSV_URL_TMPL_APIKEY.format(
+            symbol=sym_lower, apikey=self._apikey)
+      else:
+        url = STOOQ_DAILY_CSV_URL_TMPL.format(symbol=sym_lower)
       out_path = stooq_dir / f'{sym_lower}.csv'
 
       if not force and _is_fresh(out_path, refresh_days):
         skipped += 1
         continue
 
-      cache_key = f'stooq/daily/{sym_lower}.csv'
+      cache_key = f'{self._subdir}/daily/{sym_lower}.csv'
       if (not force and cache is not None
           and cache.resolve(cache_key, out_path, _CACHE_TTL_DAILY)):
         fetched += 1
@@ -67,6 +81,9 @@ class StooqProvider(BronzeProvider):
 
       try:
         content, fr = _fetch_bytes(session, url, headers=headers)
+        if not _is_valid_stooq_csv(content):
+          errors.append(f'{sym}: invalid CSV response')
+          continue
         did = _save_if_needed(
             out_path, content, fr, refresh_days=refresh_days, force=force)
         if did:

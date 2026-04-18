@@ -193,6 +193,14 @@ def _normalize_stooq_symbol(sym: str) -> str:
   return sym.strip().lower()
 
 
+def _is_valid_stooq_csv(content: bytes) -> bool:
+  """Check if content is a valid Stooq CSV (not an HTML error page)."""
+  if not content:
+    return False
+  first_line = content.split(b'\n', 1)[0].decode('utf-8', errors='ignore')
+  return first_line.startswith('Date,')
+
+
 def _save_if_needed(
     path: Path,
     content: bytes,
@@ -378,6 +386,9 @@ def run(
     content, fr = _fetch_bytes(
         session, url, headers=px_headers,
         timeout_sec=30, retries=3, backoff_sec=1.0)
+    if not _is_valid_stooq_csv(content):
+      print(f'[STOOQ] [WARN] invalid CSV for {sym_n}, skipping')
+      continue
     did = _save_if_needed(
         out_path, content, fr,
         refresh_days=refresh_days, force=force)

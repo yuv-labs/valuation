@@ -45,6 +45,89 @@ class TestStooqProviderInterface:
     assert provider.name == 'stooq'
 
 
+class TestStooqProviderConfig:
+
+  @patch('data.bronze.providers.stooq._fetch_bytes')
+  def test_subdir_writes_to_correct_path(self, mock_fetch, tmp_path):
+    mock_fetch.side_effect = _mock_fetch_bytes({
+        'stooq.com': FAKE_CSV,
+    })
+
+    provider = StooqProvider(subdir='stooq_jp')
+    provider.fetch(
+        ['6857.JP'], tmp_path, refresh_days=0, force=True)
+
+    csv_file = tmp_path / 'stooq_jp' / 'daily' / '6857.jp.csv'
+    assert csv_file.exists()
+    assert not (tmp_path / 'stooq' / 'daily' / '6857.jp.csv').exists()
+
+  @patch('data.bronze.providers.stooq._fetch_bytes')
+  def test_subdir_cache_key_uses_subdir(self, mock_fetch, tmp_path):
+    mock_fetch.side_effect = _mock_fetch_bytes({
+        'stooq.com': FAKE_CSV,
+    })
+
+    cache = BronzeCache(cache_dir=tmp_path / 'cache')
+    provider = StooqProvider(subdir='stooq_jp')
+    provider.fetch(
+        ['6857.JP'], tmp_path / 'out', refresh_days=0, force=True,
+        cache=cache)
+
+    assert cache.get_if_fresh(
+        'stooq_jp/daily/6857.jp.csv', max_age_days=None) == FAKE_CSV
+    assert cache.get_if_fresh(
+        'stooq/daily/6857.jp.csv', max_age_days=None) is None
+
+  @patch('data.bronze.providers.stooq._fetch_bytes')
+  def test_apikey_uses_apikey_url(self, mock_fetch, tmp_path):
+    mock_fetch.side_effect = _mock_fetch_bytes({
+        'apikey=mykey': FAKE_CSV,
+    })
+
+    provider = StooqProvider(apikey='mykey')
+    result = provider.fetch(
+        ['AAPL.US'], tmp_path, refresh_days=0, force=True)
+
+    assert result.fetched >= 1
+    call_url = mock_fetch.call_args[0][1]
+    assert 'apikey=mykey' in call_url
+
+
+class TestStooqProviderValidation:
+
+  @patch('data.bronze.providers.stooq._fetch_bytes')
+  def test_rejects_html_error_response(self, mock_fetch, tmp_path):
+    html_content = b'Get your apikey:\n\n1. Open https://stooq.com'
+    mock_fetch.side_effect = _mock_fetch_bytes({
+        'stooq.com': html_content,
+    })
+
+    provider = StooqProvider()
+    result = provider.fetch(
+        ['AAPL.US'], tmp_path, refresh_days=0, force=True)
+
+    assert result.fetched == 0
+    assert len(result.errors) == 1
+    assert 'invalid CSV' in result.errors[0]
+    assert not (tmp_path / 'stooq' / 'daily' / 'aapl.us.csv').exists()
+
+  @patch('data.bronze.providers.stooq._fetch_bytes')
+  def test_rejects_html_not_cached(self, mock_fetch, tmp_path):
+    html_content = b'Get your apikey:\n\n1. Open https://stooq.com'
+    mock_fetch.side_effect = _mock_fetch_bytes({
+        'stooq.com': html_content,
+    })
+
+    cache = BronzeCache(cache_dir=tmp_path / 'cache')
+    provider = StooqProvider()
+    provider.fetch(
+        ['AAPL.US'], tmp_path / 'out', refresh_days=0, force=True,
+        cache=cache)
+
+    assert cache.get_if_fresh(
+        'stooq/daily/aapl.us.csv', max_age_days=None) is None
+
+
 class TestStooqProviderFetch:
 
   @patch('data.bronze.providers.stooq._fetch_bytes')

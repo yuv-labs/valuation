@@ -172,6 +172,44 @@ class TestEDINETProviderFetch:
         max_age_days=None) is not None
 
   @patch('data.bronze.providers.edinet.requests.get')
+  def test_skips_doc_with_null_period_end(
+      self, mock_get, tmp_path):
+    zip_bytes = _make_edinet_code_zip()
+
+    doc_list_null_period = json.dumps({
+        'metadata': {'status': '200'},
+        'results': [
+            {
+                'docID': 'S100NULL',
+                'edinetCode': 'E02529',
+                'secCode': '72030',
+                'filerName': 'トヨタ自動車株式会社',
+                'docTypeCode': '130',
+                'periodStart': '2024-04-01',
+                'periodEnd': None,
+                'submitDateTime': '2025-06-25 09:00',
+            },
+        ],
+    }).encode('utf-8')
+
+    def side_effect(url, **_kwargs):
+      if 'codelist' in url:
+        return _mock_response(zip_bytes)
+      if 'documents.json' in url:
+        return _mock_response(doc_list_null_period)
+      return _mock_response(FAKE_XBRL_ZIP)
+
+    mock_get.side_effect = side_effect
+
+    provider = EDINETProvider(api_key='test', history_years=1)
+    provider.fetch(
+        ['7203'], tmp_path, refresh_days=0, force=True)
+
+    xbrl_dir = tmp_path / 'edinet' / 'xbrl'
+    none_files = list(xbrl_dir.glob('*None*'))
+    assert len(none_files) == 0
+
+  @patch('data.bronze.providers.edinet.requests.get')
   def test_restores_from_cache_without_api_call(
       self, mock_get, tmp_path):
     zip_bytes = _make_edinet_code_zip()
