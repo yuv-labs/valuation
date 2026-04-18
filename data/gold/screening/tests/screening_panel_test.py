@@ -45,6 +45,7 @@ ROLLING_METRICS = [
     'roic_5y_min',
     'op_margin_trend_5y',
     'reinvestment_rate_5y_avg',
+    'shares_5y_change',
     'roic_trend',
 ]
 
