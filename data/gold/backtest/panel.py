@@ -27,10 +27,11 @@ class BacktestPanelBuilder(BasePanelBuilder):
       gold_dir: Path,
       min_date: Optional[str] = None,
       markets: Optional[list[str]] = None,
+      preloaded_data=None,
   ):
     super().__init__(
         silver_dir, gold_dir, BACKTEST_PANEL_SCHEMA,
-        min_date, markets)
+        min_date, markets, preloaded_data=preloaded_data)
 
   def build(self) -> pd.DataFrame:
     """Build backtest panel with all PIT versions."""
@@ -44,8 +45,11 @@ class BacktestPanelBuilder(BasePanelBuilder):
     metrics_wide = builder.merge_extra_metrics(
         metrics_q, metrics_wide)
 
+    merge_cols = ['cik10', 'ticker']
+    if 'market' in companies.columns:
+      merge_cols.append('market')
     metrics_wide = metrics_wide.merge(
-        companies[['cik10', 'ticker']],
+        companies[merge_cols],
         on='cik10',
         how='left',
     )

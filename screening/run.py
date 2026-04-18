@@ -41,14 +41,14 @@ def _load_panel(gold_dir: Path) -> pd.DataFrame:
 def _load_names(
     silver_dir: Path,
 ) -> dict[str, str]:
-  """Load ticker -> company name mapping."""
+  """Load ticker -> company name mapping from all Silver sources."""
   name_map: dict[str, str] = {}
 
-  companies_path = silver_dir / 'sec' / 'companies.parquet'
-  if companies_path.exists():
+  for companies_path in sorted(silver_dir.glob('*/companies.parquet')):
     companies = pd.read_parquet(companies_path)
-    name_map.update(
-        dict(zip(companies['ticker'], companies['title'])))
+    if 'ticker' in companies.columns and 'title' in companies.columns:
+      name_map.update(
+          dict(zip(companies['ticker'], companies['title'])))
 
   return name_map
 

@@ -55,6 +55,15 @@ def build_panels(
   pd.set_option('display.max_columns', None)
   pd.set_option('display.width', None)
 
+  first_builder_cls = PANEL_BUILDERS[panels[0]]
+  loader = first_builder_cls(
+      silver_dir=silver_dir, gold_dir=gold_dir,
+      min_date=min_date, markets=markets)
+  shared_data = loader.load_shared_data()
+  logger.info('Loaded shared data: companies=%d, facts=%d, prices=%d',
+              len(shared_data[0]), len(shared_data[1]),
+              len(shared_data[2]))
+
   for panel_name in panels:
     logger.info('Building: %s', panel_name)
 
@@ -68,6 +77,7 @@ def build_panels(
         gold_dir=gold_dir,
         min_date=min_date,
         markets=markets,
+        preloaded_data=shared_data,
     )
 
     panel = builder.build()

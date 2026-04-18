@@ -74,17 +74,18 @@ class BasePanelBuilder(ABC):
       schema: PanelSchema,
       min_date: Optional[str] = None,
       markets: Optional[list[str]] = None,
+      preloaded_data: Optional[
+          tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]] = None,
   ):
     self.silver_dir = Path(silver_dir)
     self.gold_dir = Path(gold_dir)
     self.schema = schema
     self.min_date = min_date
     self.panel: Optional[pd.DataFrame] = None
+    self._preloaded_data = preloaded_data
 
     if markets is None:
       markets = ['us']
-    # Only include markets whose Silver data has been built.
-    # All panel builders require facts; skip if missing.
     self._sources: list[MarketSource] = []
     for market in markets:
       factory = MARKET_SOURCES.get(market)
@@ -97,10 +98,25 @@ class BasePanelBuilder(ABC):
   def build(self) -> pd.DataFrame:
     """Build the panel. Subclasses must implement."""
 
+  def load_shared_data(
+      self,
+  ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load data for sharing across multiple panel builders."""
+    return self._load_data_from_sources()
+
   def _load_data(
       self,
   ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load data from all configured market sources."""
+    if self._preloaded_data is not None:
+      return self._preloaded_data
+    return self._load_data_from_sources()
+
+  def _load_data_from_sources(
+      self,
+  ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load data from Silver parquet files."""
+
     companies_parts: list[pd.DataFrame] = []
     facts_parts: list[pd.DataFrame] = []
     prices_parts: list[pd.DataFrame] = []

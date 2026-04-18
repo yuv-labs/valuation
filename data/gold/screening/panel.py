@@ -51,6 +51,7 @@ class ScreeningPanelBuilder(BasePanelBuilder):
       gold_dir: Path,
       min_date: Optional[str] = None,
       markets: Optional[list[str]] = None,
+      preloaded_data=None,
   ):
     schema = PanelSchema(
         name=_SCREENING_SCHEMA_NAME,
@@ -59,7 +60,8 @@ class ScreeningPanelBuilder(BasePanelBuilder):
         primary_key=['ticker', 'end'],
     )
     super().__init__(
-        silver_dir, gold_dir, schema, min_date, markets)
+        silver_dir, gold_dir, schema, min_date, markets,
+        preloaded_data=preloaded_data)
 
   def build(self) -> pd.DataFrame:
     """Build screening panel (US + optionally KR)."""
@@ -82,8 +84,11 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     wide = self._pivot_to_wide(metrics_q)
 
     # Join with company tickers.
+    merge_cols = ['cik10', 'ticker']
+    if 'market' in companies.columns:
+      merge_cols.append('market')
     wide = wide.merge(
-        companies[['cik10', 'ticker']],
+        companies[merge_cols],
         on='cik10', how='left',
     )
     wide = wide.dropna(subset=['ticker'])

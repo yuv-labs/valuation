@@ -1,12 +1,11 @@
-"""EDINET Silver pipeline — Bronze XBRL to Silver parquet."""
+"""EDINET Silver pipeline — Bronze CSV to Silver parquet."""
 
-import csv
-import io
 import logging
 from pathlib import Path
 
 import pandas as pd
 
+from data.bronze.providers.edinet import read_edinet_code_csv
 from data.silver.core.pipeline import Pipeline
 from data.silver.sources.edinet.extractors import EDINETExtractor
 
@@ -14,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class EDINETPipeline(Pipeline):
-  """EDINET XBRL filings → Silver facts_long + companies."""
+  """EDINET CSV filings → Silver facts_long + companies."""
 
   def extract(self) -> None:
     edinet_dir = self.context.bronze_dir / 'edinet'
@@ -25,7 +24,7 @@ class EDINETPipeline(Pipeline):
       return
 
     edinet_to_sec = self._load_code_mapping(edinet_dir)
-    facts = self._extract_all_xbrl(edinet_dir, edinet_to_sec)
+    facts = self._extract_all_filings(edinet_dir, edinet_to_sec)
 
     self.datasets['facts_long'] = facts
     self.datasets['companies'] = self._build_companies(
@@ -74,12 +73,10 @@ class EDINETPipeline(Pipeline):
       return {}
 
     result: dict[str, dict] = {}
-    text = csv_path.read_bytes().decode('utf-8-sig')
-    reader = csv.DictReader(io.StringIO(text))
 
-    for row in reader:
+    for row in read_edinet_code_csv(csv_path):
       edinet_code = (row.get('EDINET code')
-                     or row.get('EDINETコード', '')).strip()
+                     or row.get('ＥＤＩＮＥＴコード', '')).strip()
       sec_code = (row.get('Securities code')
                   or row.get('証券コード', '')).strip()
       name = (row.get('Submitter name')
@@ -104,11 +101,11 @@ class EDINETPipeline(Pipeline):
     return result
 
   @staticmethod
-  def _extract_all_xbrl(
+  def _extract_all_filings(
       edinet_dir: Path,
       edinet_to_sec: dict[str, dict],
   ) -> pd.DataFrame:
-    """Extract facts from all XBRL zips."""
+    """Extract facts from all EDINET CSV zips."""
     xbrl_dir = edinet_dir / 'xbrl'
     if not xbrl_dir.exists():
       return pd.DataFrame()
@@ -130,8 +127,8 @@ class EDINETPipeline(Pipeline):
       df['cik10'] = ticker
 
       if period_end:
-        df['end'] = pd.to_datetime(df['end'])
         end_ts = pd.Timestamp(period_end)
+        df['end'] = end_ts
         year = end_ts.year
         month = end_ts.month
 

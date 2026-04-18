@@ -88,6 +88,19 @@ class TestYTDToQuarterlyConverter:
     assert len(q2) == 1
     assert q2.iloc[0]['q_val'] == 250.0
 
+  def test_restated_q1_after_q2_uses_original(self):
+    """Restated Q1 filed after Q2 should not affect Q2's subtraction."""
+    facts = _make_ytd_facts('AAPL', 'CFO', [
+        {'fy': 2024, 'fp': 'Q1', 'val': 100.0, 'filed': '2024-04-15'},
+        {'fy': 2024, 'fp': 'Q2', 'val': 250.0, 'filed': '2024-07-15'},
+        {'fy': 2024, 'fp': 'Q1', 'val': 120.0, 'filed': '2024-08-01'},
+    ])
+    result = YTDToQuarterlyConverter().convert(facts)
+    q2 = result[result['fiscal_quarter'] == 'Q2']
+
+    assert len(q2) == 1
+    assert q2.iloc[0]['q_val'] == 150.0
+
   def test_non_ytd_metric_passes_through(self):
     """Non-YTD metrics (e.g., SHARES) pass val as q_val directly."""
     facts = _make_ytd_facts('AAPL', 'SHARES', [{

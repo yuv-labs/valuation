@@ -5,6 +5,7 @@ import json
 from unittest.mock import patch
 import zipfile
 
+from data.bronze.cache import BronzeCache
 from data.bronze.providers.base import BronzeProvider
 from data.bronze.providers.base import ProviderResult
 from data.bronze.providers.edinet import EDINETProvider
@@ -143,3 +144,59 @@ class TestEDINETProviderFetch:
     assert xbrl_dir.exists()
     xbrl_files = list(xbrl_dir.glob('*.zip'))
     assert len(xbrl_files) >= 1
+
+  @patch('data.bronze.providers.edinet.requests.get')
+  def test_stores_fetched_data_in_cache(
+      self, mock_get, tmp_path):
+    zip_bytes = _make_edinet_code_zip()
+
+    def side_effect(url, **_kwargs):
+      if 'codelist' in url:
+        return _mock_response(zip_bytes)
+      if 'documents.json' in url:
+        return _mock_response(FAKE_DOC_LIST_RESPONSE)
+      return _mock_response(FAKE_XBRL_ZIP)
+
+    mock_get.side_effect = side_effect
+
+    cache = BronzeCache(cache_dir=tmp_path / 'cache')
+    provider = EDINETProvider(api_key='test', history_years=1)
+    provider.fetch(
+        ['7203'], tmp_path / 'out', refresh_days=0, force=True,
+        cache=cache)
+
+    assert cache.get_if_fresh(
+        'edinet/EdinetcodeDlInfo.csv', max_age_days=None) is not None
+    assert cache.get_if_fresh(
+        'edinet/xbrl/E02529_2025-03-31_120.zip',
+        max_age_days=None) is not None
+
+  @patch('data.bronze.providers.edinet.requests.get')
+  def test_restores_from_cache_without_api_call(
+      self, mock_get, tmp_path):
+    zip_bytes = _make_edinet_code_zip()
+
+    def side_effect(url, **_kwargs):
+      if 'codelist' in url:
+        return _mock_response(zip_bytes)
+      if 'documents.json' in url:
+        return _mock_response(FAKE_DOC_LIST_RESPONSE)
+      return _mock_response(FAKE_XBRL_ZIP)
+
+    mock_get.side_effect = side_effect
+
+    cache = BronzeCache(cache_dir=tmp_path / 'cache')
+    provider = EDINETProvider(api_key='test', history_years=1)
+
+    provider.fetch(
+        ['7203'], tmp_path / 'out1', refresh_days=0, force=True,
+        cache=cache)
+    calls_after_first = mock_get.call_count
+
+    provider.fetch(
+        ['7203'], tmp_path / 'out2', refresh_days=0, force=False,
+        cache=cache)
+
+    assert (tmp_path / 'out2' / 'edinet' / 'xbrl'
+            / 'E02529_2025-03-31_120.zip').exists()
+    assert mock_get.call_count == calls_after_first
