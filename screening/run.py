@@ -2,8 +2,7 @@
 Run stock screening pipeline.
 
 Usage:
-  python -m screening.run                          # Track A → B (default)
-  python -m screening.run --track moat             # Track A only
+  python -m screening.run
   python -m screening.run --top 30 --min-mcap-kr 1e12
 """
 
@@ -13,10 +12,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from screening.domain import Track
-from screening.filters.moat_existence import MoatExistenceFilter
-from screening.filters.moat_health import MoatHealthFilter
-from screening.filters.opportunity import OpportunityFilter
 from screening.report.generator import generate_html
 from screening.report.generator import print_table
 from screening.scorers.composite import CompositeScorer
@@ -112,48 +107,9 @@ def _filter_market_cap(
   return df[mask].copy()
 
 
-def _run_track_a(df: pd.DataFrame) -> pd.DataFrame:
-  """Track A: moat universe — identify durable moat companies."""
-  df = MoatExistenceFilter().apply(df)
-  logger.info('After moat existence filter: %d', len(df))
-
-  df = MoatHealthFilter(min_signals=2).apply(df)
-  logger.info('After moat health filter: %d', len(df))
-
-  if df.empty:
-    return df
-
-  moat = MoatScorer()
-  df['moat_score'] = df.apply(moat.score, axis=1)
-  return df
-
-
-def _run_track_b(df: pd.DataFrame) -> pd.DataFrame:
-  """Track B: opportunity scanner — find moat companies at fair prices."""
-  df = OpportunityFilter(min_signals=2).apply(df)
-  logger.info('After opportunity filter: %d', len(df))
-
-  if df.empty:
-    return df
-
-  fear = FearScorer()
-  composite = CompositeScorer()
-
-  df['fear_score'] = df.apply(fear.score, axis=1)
-  assert 'moat_score' in df.columns, (
-      'Track B requires moat_score from Track A')
-  df['opportunity_score'] = df.apply(
-      lambda r: composite.score(
-          r['fear_score'], r['moat_score']),
-      axis=1)
-
-  return df
-
-
 def run_screening(
     gold_dir: Path,
     silver_dir: Path | None = None,
-    track: Track = Track.FULL,
     top_n: int = 30,
     min_market_cap_us: float = 2e9,
     min_market_cap_kr: float = 3e11,
@@ -171,13 +127,23 @@ def run_screening(
                           min_market_cap_jp=min_market_cap_jp)
   logger.info('After market cap filter: %d', len(df))
 
-  if track == Track.MOAT:
-    df = _run_track_a(df)
-    sort_col = 'moat_score'
-  else:  # Track.FULL: Track A → Track B
-    df = _run_track_a(df)
-    df = _run_track_b(df)
-    sort_col = 'opportunity_score'
+  # Apply gold-layer gates (trust, leverage, consecutive ROIC).
+  if 'gate_pass' not in df.columns:
+    raise ValueError(
+        'gate_pass column missing — rebuild the screening panel')
+  df = df[df['gate_pass']].copy()
+  logger.info('After gate filter: %d', len(df))
+
+  # Add moat/fear/opportunity scores as supplemental columns.
+  moat = MoatScorer()
+  fear = FearScorer()
+  composite = CompositeScorer()
+  df['moat_score'] = df.apply(moat.score, axis=1)
+  df['fear_score'] = df.apply(fear.score, axis=1)
+  df['opportunity_score'] = df.apply(
+      lambda r: composite.score(
+          r['fear_score'], r['moat_score']),
+      axis=1)
 
   if df.empty:
     logger.warning('No stocks passed filters.')
@@ -190,9 +156,27 @@ def run_screening(
   df['name'] = df['ticker'].apply(
       lambda t: _resolve_kr_name(t, name_map))
 
+  # Sort by track-appropriate quant score.
+  f_score = df.get(
+      'fisher_quant_score',
+      pd.Series(0, index=df.index)).fillna(0)
+  b_score = df.get(
+      'buffett_quant_score',
+      pd.Series(0, index=df.index)).fillna(0)
+  track = df.get(
+      'track_signal', pd.Series('', index=df.index)).fillna('')
+
+  df['_sort'] = pd.Series(0.0, index=df.index)
+  df.loc[track == 'fisher', '_sort'] = f_score
+  df.loc[track == 'buffett', '_sort'] = b_score
+  mixed_mask = ~track.isin(['fisher', 'buffett'])
+  df.loc[mixed_mask, '_sort'] = pd.concat(
+      [f_score[mixed_mask], b_score[mixed_mask]],
+      axis=1).max(axis=1)
   df = df.sort_values(
-      ['market', sort_col],
+      ['market', '_sort'],
       ascending=[True, False])
+  df = df.drop(columns=['_sort'])
 
   # Output.
   top = df.head(top_n)
@@ -203,13 +187,11 @@ def run_screening(
     output_dir.mkdir(parents=True, exist_ok=True)
     from datetime import datetime  # pylint: disable=import-outside-toplevel
     today = datetime.now().strftime('%Y%m%d')
-    suffix = f'_{track.value}' if track != Track.FULL else ''
-
-    csv_path = output_dir / f'screening_{today}{suffix}.csv'
+    csv_path = output_dir / f'screening_{today}.csv'
     df.to_csv(csv_path, index=False)
     logger.info('CSV: %s', csv_path)
 
-    html_path = output_dir / f'screening_{today}{suffix}.html'
+    html_path = output_dir / f'screening_{today}.html'
     generate_html(df, html_path)
     logger.info('HTML: %s', html_path)
 
@@ -228,9 +210,6 @@ def main() -> None:
   parser.add_argument(
       '--output-dir', type=Path,
       default=Path('output'))
-  parser.add_argument(
-      '--track', type=str, default='full',
-      choices=[t.value for t in Track])
   parser.add_argument('--top', type=int, default=50)
   parser.add_argument(
       '--min-mcap-us', type=float, default=2e9)
@@ -243,7 +222,6 @@ def main() -> None:
   run_screening(
       gold_dir=args.gold_dir,
       silver_dir=args.silver_dir,
-      track=Track(args.track),
       top_n=args.top,
       min_market_cap_us=args.min_mcap_us,
       min_market_cap_kr=args.min_mcap_kr,
