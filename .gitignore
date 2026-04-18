@@ -9,6 +9,9 @@ venv
 !example/**/*.txt
 !example/**/*.json
 !example/**/*.png
+!.claude/**/*.md
+.claude/settings.local.json
+.claude/*.lock
 .DS_Store
 .coverage
 *.egg-info/
