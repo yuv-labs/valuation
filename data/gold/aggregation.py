@@ -9,7 +9,7 @@ import logging
 
 import pandas as pd
 
-from data.silver.config.metric_specs import METRIC_SPECS
+from data.silver.config.metric_catalog import METRIC_CATALOG
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class YTDToQuarterlyConverter:
 
     out_parts: list[pd.DataFrame] = []
 
-    for metric, spec in METRIC_SPECS.items():
+    for metric, spec in METRIC_CATALOG.items():
       df = facts[facts['metric'] == metric].copy()
       if df.empty:
         continue

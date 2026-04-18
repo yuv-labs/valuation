@@ -151,7 +151,7 @@ def join_prices_pit(
   prices['date'] = pd.to_datetime(prices['date'])
 
   prices = prices.rename(columns={'symbol': 'ticker'})
-  prices['ticker'] = prices['ticker'].str.replace('.US', '', regex=False)
+  prices['ticker'] = prices['ticker'].str.replace(r'\.\w+$', '', regex=True)
 
   panel_parts = []
 

@@ -162,6 +162,7 @@ class SECPipeline(Pipeline):
           self.sec_dir / 'company_tickers.json'
       ]
 
+      dataset['market'] = 'us'
       self.writer.write(dataset,
                         output_path,
                         inputs=inputs,

@@ -69,6 +69,7 @@ def build_krx_prices(
   out_dir = silver_dir / 'krx'
   out_dir.mkdir(parents=True, exist_ok=True)
   out_path = out_dir / 'prices_daily.parquet'
+  prices['market'] = 'kr'
   prices.to_parquet(out_path, index=False)
 
   logger.info(
@@ -146,6 +147,7 @@ class KRXPipeline(Pipeline):
     out_dir = self.context.silver_dir / 'krx'
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / 'prices_daily.parquet'
+    prices['market'] = 'kr'
     prices.to_parquet(out_path, index=False)
 
     logger.info(

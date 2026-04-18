@@ -215,6 +215,22 @@ class TestDARTPipeline:
     assert 'ticker' in df.columns
     assert '005930' in df['ticker'].values
 
+  def test_facts_long_has_market_column(self, bronze_dir, tmp_path):
+    ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
+    DARTPipeline(ctx).run()
+
+    df = pd.read_parquet(tmp_path / 'dart' / 'facts_long.parquet')
+    assert 'market' in df.columns
+    assert (df['market'] == 'kr').all()
+
+  def test_companies_has_market_column(self, bronze_dir, tmp_path):
+    ctx = PipelineContext(bronze_dir=bronze_dir, silver_dir=tmp_path)
+    DARTPipeline(ctx).run()
+
+    df = pd.read_parquet(tmp_path / 'dart' / 'companies.parquet')
+    assert 'market' in df.columns
+    assert (df['market'] == 'kr').all()
+
   def test_empty_bronze_produces_empty_result(self, tmp_path):
     """No DART data → pipeline succeeds with empty datasets."""
     bronze = tmp_path / 'bronze'

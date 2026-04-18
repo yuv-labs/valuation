@@ -112,7 +112,7 @@ def main() -> None:
   parser.add_argument(
       '--markets',
       nargs='+',
-      choices=['us', 'kr'],
+      choices=['us', 'kr', 'jp'],
       default=['us', 'kr'],
       help='Markets to include (default: us kr)',
   )

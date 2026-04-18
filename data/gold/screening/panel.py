@@ -145,7 +145,7 @@ class ScreeningPanelBuilder(BasePanelBuilder):
       prices = prices.rename(columns={'symbol': 'ticker'})
     if 'ticker' in prices.columns:
       prices['ticker'] = (
-          prices['ticker'].str.replace('.US', '', regex=False))
+          prices['ticker'].str.replace(r'\.\w+$', '', regex=True))
 
     # Get latest price per ticker.
     latest_prices = (
@@ -440,7 +440,7 @@ class ScreeningPanelBuilder(BasePanelBuilder):
       prices = prices.rename(columns={'symbol': 'ticker'})
     if 'ticker' in prices.columns:
       prices['ticker'] = (
-          prices['ticker'].str.replace('.US', '', regex=False))
+          prices['ticker'].str.replace(r'\.\w+$', '', regex=True))
 
     # Use 'high' if available, otherwise 'close'.
     if 'high' in prices.columns:
