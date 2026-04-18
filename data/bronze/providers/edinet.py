@@ -257,8 +257,12 @@ class EDINETProvider(BronzeProvider):
 
     for doc in docs:
       doc_id = doc['docID']
-      period_end = doc.get('periodEnd', 'unknown')
+      period_end = doc.get('periodEnd')
       doc_type = doc.get('docTypeCode', '')
+
+      if not period_end:
+        logger.warning('Skipping doc %s: missing periodEnd', doc_id)
+        continue
 
       filename = f'{edinet_code}_{period_end}_{doc_type}.zip'
       out_path = edinet_dir / 'xbrl' / filename

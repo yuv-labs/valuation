@@ -81,7 +81,7 @@ def run():
 
   if not args.skip_prices:
     jp_symbols = [f'{t}.JP' for t in args.tickers]
-    stooq = StooqProvider()
+    stooq = StooqProvider(subdir='stooq_jp')
     print(f'Fetching Stooq JP prices for: {jp_symbols}...')
     price_result = stooq.fetch(
         tickers=jp_symbols,
