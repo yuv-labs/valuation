@@ -622,15 +622,6 @@ class ScreeningPanelBuilder(BasePanelBuilder):
       'op_margin_trend_5y': (-0.001, 0.001, 2),
       'cfo_to_ni_ratio': (0.5, 1.0, 2),
   }
-  # Buffett tier thresholds.
-  _BUFFETT_TIERS = {
-      'fcf_yield': (0.03, 0.07, 3),
-      'fcf_positive_3y': (0.5, 1.0, 2),
-      'shares_5y_change': (0.01, -0.01, 2),
-      'roic': (0.10, 0.25, 3),
-      'debt_to_assets': (0.50, 0.30, 1),
-  }
-
   @staticmethod
   def _compute_track_signals(
       panel: pd.DataFrame,
@@ -730,12 +721,10 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     result = pd.Series(0, index=col.index)
     notna = col.notna()
     if inverted:
-      result = result.where(
-          ~notna, (col <= hi).astype(int) * weight
-          + ((col > hi) & (col <= lo)).astype(int) * weight)
       result[notna] = (
           ((col[notna] <= hi).astype(int) * 2
-           + ((col[notna] > hi) & (col[notna] <= lo)).astype(int))
+           + ((col[notna] > hi)
+              & (col[notna] <= lo)).astype(int))
           * weight)
     else:
       result[notna] = (
