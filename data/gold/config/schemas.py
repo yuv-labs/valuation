@@ -192,6 +192,9 @@ _COMMON_COLUMNS = [
                'float64',
                nullable=True,
                description='Market capitalization (shares * price)'),
+]
+
+_LATEST_PRICE_COLUMNS = [
     ColumnSpec('date_latest',
                'datetime64[ns]',
                nullable=True,
@@ -209,7 +212,7 @@ _COMMON_COLUMNS = [
 VALUATION_PANEL_SCHEMA = PanelSchema(
     name='valuation_panel',
     description='Latest version only for current valuation',
-    columns=_COMMON_COLUMNS,
+    columns=_COMMON_COLUMNS + _LATEST_PRICE_COLUMNS,
     primary_key=['ticker', 'end'],
 )
 
