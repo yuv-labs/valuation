@@ -103,54 +103,72 @@ class YTDToQuarterlyConverter:
     if df_ytd.empty:
       return pd.DataFrame()
 
-    df = df_ytd.copy()
-    df = df.sort_values('filed')
-
-    prev_fp_map = {'Q2': 'Q1', 'Q3': 'Q2', 'FY': 'Q3'}
     fp_to_fq = {'Q1': 'Q1', 'Q2': 'Q2', 'Q3': 'Q3', 'FY': 'Q4'}
+    prev_fp_map = {'Q2': 'Q1', 'Q3': 'Q2', 'FY': 'Q3'}
 
-    out_rows = []
+    df = df_ytd.copy()
+    df['fp'] = df['fp'].astype(str)
+    df['expected_fq'] = df['fp'].map(fp_to_fq)
+    df = df[df['expected_fq'] == df['fiscal_quarter']]
+    if df.empty:
+      return pd.DataFrame()
 
-    for _, row in df.iterrows():
-      fp = str(row['fp'])
-      fiscal_year = row['fiscal_year']
-      filed = row['filed']
-      ytd_val = float(row['val'])
+    df = df.sort_values('filed')
+    df['filed'] = pd.to_datetime(df['filed'])
 
-      expected_fq = fp_to_fq.get(fp)
-      if expected_fq and row.get('fiscal_quarter') != expected_fq:
-        continue
+    df['prev_fp'] = df['fp'].map(prev_fp_map)
 
-      if fp == 'Q1':
-        q_val = ytd_val
-      elif fp in prev_fp_map:
-        prev_q = prev_fp_map[fp]
-        candidates = df[(df['fiscal_year'] == fiscal_year) &
-                        (df['fp'] == prev_q) &
-                        (df['fiscal_quarter'] == prev_q) &
-                        (df['filed'] < filed)]
+    # Build prev lookup from ALL filings (pre-dedup) for PIT correctness.
+    # For each current row, find the latest prev-quarter filing
+    # that was filed BEFORE the current row's filed date.
+    prev_pool = (df[df['fp'].isin(prev_fp_map.values())]
+                 [['fiscal_year', 'fp', 'val', 'filed']]
+                 .rename(columns={'fp': 'prev_fp', 'val': '_prev_val',
+                                  'filed': '_prev_filed'})
+                 .sort_values('_prev_filed'))
 
-        if not candidates.empty:
-          prev_row = candidates.sort_values('filed').iloc[-1]
-          prev_ytd_val = float(prev_row['val'])
-          q_val = ytd_val - prev_ytd_val
-        else:
-          q_val = ytd_val
-      else:
-        continue
+    needs_prev = df[df['prev_fp'].notna()].sort_values('filed')
 
-      out_rows.append({
-          'end': row['end'],
-          'filed': row['filed'],
-          'fy': row['fy'],
-          'fp': 'Q4' if fp == 'FY' else fp,
-          'fiscal_year': fiscal_year,
-          'fiscal_quarter': expected_fq,
-          'q_val': q_val,
-          'tag': row['tag'],
-      })
+    if not needs_prev.empty and not prev_pool.empty:
+      matched = pd.merge_asof(
+          needs_prev,
+          prev_pool,
+          by=['fiscal_year', 'prev_fp'],
+          left_on='filed',
+          right_on='_prev_filed',
+          direction='backward',
+      )
+    else:
+      matched = needs_prev.copy()
+      matched['_prev_val'] = pd.NA
 
-    return pd.DataFrame(out_rows)
+    # Dedup: keep latest filing per (fiscal_year, fp)
+    df = df.drop_duplicates(
+        subset=['fiscal_year', 'fp'], keep='last')
+
+    # Q1 rows don't need subtraction
+    q1_rows = df[df['prev_fp'].isna()].copy()
+    q1_rows['q_val'] = q1_rows['val'].astype(float)
+
+    # Non-Q1 rows: use matched prev values
+    if not matched.empty:
+      non_q1 = matched.drop_duplicates(
+          subset=['fiscal_year', 'fp'], keep='last').copy()
+      non_q1['q_val'] = non_q1['val'].astype(float)
+      has_prev = non_q1['_prev_val'].notna()
+      non_q1.loc[has_prev, 'q_val'] = (
+          non_q1.loc[has_prev, 'val'].astype(float)
+          - non_q1.loc[has_prev, '_prev_val'].astype(float))
+    else:
+      non_q1 = pd.DataFrame()
+
+    merged = pd.concat([q1_rows, non_q1], ignore_index=True)
+
+    merged['fp'] = merged['fp'].replace({'FY': 'Q4'})
+    merged['fiscal_quarter'] = merged['expected_fq']
+
+    return merged[['end', 'filed', 'fy', 'fp', 'fiscal_year',
+                    'fiscal_quarter', 'q_val', 'tag']].copy()
 
 
 class TTMCalculator:

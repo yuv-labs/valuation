@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import csv
-from datetime import datetime
+from datetime import date
+from datetime import timedelta
 import io
+import json
 import logging
 from pathlib import Path
 import time
-from typing import Iterable
+from typing import Iterable, TYPE_CHECKING
 import zipfile
 
 import requests
@@ -19,6 +21,9 @@ from data.bronze.update import _atomic_write_bytes
 from data.bronze.update import _ensure_dir
 from data.bronze.update import _is_fresh
 from data.bronze.update import _write_meta
+
+if TYPE_CHECKING:
+  from data.bronze.cache import BronzeCache
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +37,17 @@ _DOC_DOWNLOAD_URL = (
 
 _DEFAULT_HISTORY_YEARS = 5
 
-_DOC_TYPE_ANNUAL = '120'
-_DOC_TYPE_QUARTERLY = '130'
-_DOC_TYPE_SEMIANNUAL = '140'
-_TARGET_DOC_TYPES = {_DOC_TYPE_ANNUAL, _DOC_TYPE_QUARTERLY,
-                     _DOC_TYPE_SEMIANNUAL}
+DOC_TYPE_ANNUAL = '120'
+DOC_TYPE_QUARTERLY = '130'
+DOC_TYPE_SEMIANNUAL = '140'
+TARGET_DOC_TYPES = {DOC_TYPE_ANNUAL, DOC_TYPE_QUARTERLY,
+                     DOC_TYPE_SEMIANNUAL}
+
+_CACHE_TTL_EDINET_CODES = 30
+_CACHE_TTL_XBRL = None  # historical filings are immutable
+_CACHE_TTL_DOC_LIST_RECENT = 7
+_CACHE_TTL_DOC_LIST_HISTORICAL = None
+_RECENT_DAYS_THRESHOLD = 30
 
 
 class EDINETProvider(BronzeProvider):
@@ -47,10 +58,12 @@ class EDINETProvider(BronzeProvider):
       api_key: str,
       min_interval_sec: float = 0.5,
       history_years: int = _DEFAULT_HISTORY_YEARS,
+      doc_types: set[str] | None = None,
   ) -> None:
     self._api_key = api_key
     self._min_interval = min_interval_sec
     self._history_years = history_years
+    self._doc_types = doc_types or TARGET_DOC_TYPES
 
   @property
   def name(self) -> str:
@@ -63,6 +76,7 @@ class EDINETProvider(BronzeProvider):
       *,
       refresh_days: int = 7,
       force: bool = False,
+      cache: BronzeCache | None = None,
   ) -> ProviderResult:
     edinet_dir = out_dir / 'edinet'
     _ensure_dir(edinet_dir / 'xbrl')
@@ -72,34 +86,51 @@ class EDINETProvider(BronzeProvider):
     errors: list[str] = []
 
     csv_path = edinet_dir / 'EdinetcodeDlInfo.csv'
+    csv_cache_key = 'edinet/EdinetcodeDlInfo.csv'
     if force or not _is_fresh(csv_path, refresh_days):
-      try:
-        self._fetch_edinet_codes(csv_path)
+      if (not force and cache is not None
+          and cache.resolve(csv_cache_key, csv_path,
+                            _CACHE_TTL_EDINET_CODES)):
         fetched += 1
-      except (requests.RequestException, OSError) as exc:
-        errors.append(f'edinet_codes: {exc}')
-        return ProviderResult(
-            provider_name=self.name,
-            fetched=fetched, skipped=skipped,
-            errors=errors)
+      else:
+        try:
+          self._fetch_edinet_codes(csv_path)
+          if cache is not None:
+            cache.put(csv_cache_key, csv_path.read_bytes())
+          fetched += 1
+        except (requests.RequestException, OSError) as exc:
+          errors.append(f'edinet_codes: {exc}')
+          return ProviderResult(
+              provider_name=self.name,
+              fetched=fetched, skipped=skipped,
+              errors=errors)
     else:
       skipped += 1
 
     sec_to_edinet = _parse_edinet_codes(csv_path)
 
-    tickers_list = list(tickers)
-    for ticker in tickers_list:
+    target_edinet_codes: set[str] = set()
+    edinet_to_ticker: dict[str, str] = {}
+    for ticker in tickers:
       ticker = ticker.strip()
       sec_code = f'{ticker}0' if len(ticker) == 4 else ticker
       edinet_code = sec_to_edinet.get(sec_code)
       if edinet_code is None:
         errors.append(f'Ticker not found in EDINET: {ticker}')
         continue
+      target_edinet_codes.add(edinet_code)
+      edinet_to_ticker[edinet_code] = ticker
 
+    docs_by_edinet = self._search_all_documents(
+        target_edinet_codes, cache=cache)
+
+    for edinet_code, docs in docs_by_edinet.items():
+      ticker = edinet_to_ticker.get(edinet_code, edinet_code)
       try:
-        n = self._fetch_filings_for(
-            edinet_code, edinet_dir,
-            refresh_days=refresh_days, force=force)
+        n = self._download_filings(
+            docs, edinet_code, edinet_dir,
+            refresh_days=refresh_days, force=force,
+            cache=cache)
         fetched += n
       except (requests.RequestException, OSError) as exc:
         errors.append(f'{ticker}: {exc}')
@@ -127,26 +158,119 @@ class EDINETProvider(BronzeProvider):
 
     raise ValueError('No CSV found in EDINET code zip')
 
-  def _fetch_filings_for(
+  def _search_all_documents(
       self,
+      target_edinet_codes: set[str],
+      *,
+      cache: BronzeCache | None = None,
+  ) -> dict[str, list[dict]]:
+    """Fetch doc lists by date and match all target tickers at once.
+
+    Scans every calendar day for history_years. Each date is fetched
+    once regardless of ticker count, and cached for 7 days.
+    """
+    today = date.today()
+    start = date(today.year - self._history_years, 1, 1)
+    results: dict[str, list[dict]] = {c: [] for c in target_edinet_codes}
+    seen_doc_ids: set[str] = set()
+
+    current = start
+    total_days = (today - start).days
+    api_calls = 0
+    cache_hits = 0
+
+    while current <= today:
+      date_str = current.isoformat()
+
+      doc_cache_key = f'edinet/doclist/{date_str}.json'
+      days_ago = (today - current).days
+      cache_ttl = (_CACHE_TTL_DOC_LIST_RECENT
+                   if days_ago <= _RECENT_DAYS_THRESHOLD
+                   else _CACHE_TTL_DOC_LIST_HISTORICAL)
+      cached = (cache.get_if_fresh(doc_cache_key, cache_ttl)
+                if cache is not None else None)
+      if cached is not None:
+        cache_hits += 1
+        try:
+          data = json.loads(cached)
+        except (ValueError, TypeError):
+          data = {}
+      else:
+        time.sleep(self._min_interval)
+        api_calls += 1
+
+        if api_calls % 100 == 0:
+          logger.info('EDINET doc search: %d/%d days '
+                      '(%d API, %d cache)',
+                      api_calls + cache_hits, total_days,
+                      api_calls, cache_hits)
+
+        doc_params: dict[str, str] = {
+            'date': date_str,
+            'type': '2',
+            'Subscription-Key': self._api_key,
+        }
+        resp = requests.get(
+            _DOC_LIST_URL, params=doc_params, timeout=30)
+        if not resp.ok:
+          logger.debug('EDINET API %s: %d', date_str,
+                       resp.status_code)
+          continue
+
+        try:
+          data = resp.json()
+        except (ValueError, AttributeError):
+          data = {}
+
+        if cache is not None:
+          cache.put(doc_cache_key,
+                    json.dumps(data).encode('utf-8'))
+
+      for doc in data.get('results', []):
+        doc_id = doc.get('docID', '')
+        edinet_code = doc.get('edinetCode', '')
+        if (edinet_code in target_edinet_codes
+            and doc.get('docTypeCode') in self._doc_types
+            and doc_id not in seen_doc_ids):
+          results[edinet_code].append(doc)
+          seen_doc_ids.add(doc_id)
+
+      current += timedelta(days=1)
+
+    logger.info('EDINET doc search done: %d API calls, '
+                '%d cache hits, %d docs found',
+                api_calls, cache_hits,
+                sum(len(v) for v in results.values()))
+    return results
+
+  def _download_filings(
+      self,
+      docs: list[dict],
       edinet_code: str,
       edinet_dir: Path,
       *,
       refresh_days: int,
       force: bool,
+      cache: BronzeCache | None = None,
   ) -> int:
     fetched = 0
-    doc_ids = self._search_documents(edinet_code)
 
-    for doc in doc_ids:
+    for doc in docs:
       doc_id = doc['docID']
       period_end = doc.get('periodEnd', 'unknown')
       doc_type = doc.get('docTypeCode', '')
 
-      out_path = (edinet_dir / 'xbrl'
-                  / f'{edinet_code}_{period_end}_{doc_type}.zip')
+      filename = f'{edinet_code}_{period_end}_{doc_type}.zip'
+      out_path = edinet_dir / 'xbrl' / filename
 
       if not force and _is_fresh(out_path, refresh_days):
+        continue
+
+      xbrl_cache_key = f'edinet/xbrl/{filename}'
+      if (not force and cache is not None
+          and cache.resolve(xbrl_cache_key, out_path,
+                            _CACHE_TTL_XBRL)):
+        fetched += 1
         continue
 
       time.sleep(self._min_interval)
@@ -165,54 +289,29 @@ class EDINETProvider(BronzeProvider):
           'status_code': resp.status_code,
           'nbytes': len(resp.content),
       })
+      if cache is not None:
+        cache.put(xbrl_cache_key, resp.content)
       fetched += 1
 
     return fetched
 
-  def _search_documents(self, edinet_code: str) -> list[dict]:
-    """Search EDINET document list for filings by edinet_code.
 
-    EDINET API returns filings submitted on an exact date.
-    Annual reports are typically filed ~3 months after FYE,
-    so we scan the primary filing windows (June/July for March FYE,
-    etc.) day by day.
-    """
-    now = datetime.now()
-    results: list[dict] = []
-    seen_doc_ids: set[str] = set()
+def read_edinet_code_csv(csv_path: Path) -> csv.DictReader:
+  """Read EDINET code CSV handling cp932/utf-8 and metadata header."""
+  raw = csv_path.read_bytes()
+  for encoding in ('utf-8-sig', 'cp932'):
+    try:
+      text = raw.decode(encoding)
+      break
+    except (UnicodeDecodeError, ValueError):
+      continue
+  else:
+    return csv.DictReader(io.StringIO(''))
 
-    for year_offset in range(self._history_years):
-      year = now.year - year_offset
-      for filing_month in [6, 7, 8, 11, 12, 2, 3, 5]:
-        for day in [15, 20, 25, 28]:
-          date_str = f'{year}-{filing_month:02d}-{day:02d}'
-          time.sleep(self._min_interval)
-
-          doc_params: dict[str, str] = {
-              'date': date_str,
-              'type': '2',
-              'Subscription-Key': self._api_key,
-          }
-          resp = requests.get(
-              _DOC_LIST_URL, params=doc_params, timeout=30)
-          if not resp.ok:
-            logger.debug('EDINET API %s: %d', date_str,
-                         resp.status_code)
-            continue
-
-          try:
-            data = resp.json()
-          except (ValueError, AttributeError):
-            data = {}
-          for doc in data.get('results', []):
-            doc_id = doc.get('docID', '')
-            if (doc.get('edinetCode') == edinet_code
-                and doc.get('docTypeCode') in _TARGET_DOC_TYPES
-                and doc_id not in seen_doc_ids):
-              results.append(doc)
-              seen_doc_ids.add(doc_id)
-
-    return results
+  lines = text.strip().split('\n')
+  if lines and 'ＥＤＩＮＥＴコード' not in lines[0]:
+    lines = lines[1:]
+  return csv.DictReader(io.StringIO('\n'.join(lines)))
 
 
 def _parse_edinet_codes(csv_path: Path) -> dict[str, str]:
@@ -221,12 +320,9 @@ def _parse_edinet_codes(csv_path: Path) -> dict[str, str]:
     return {}
 
   result: dict[str, str] = {}
-  text = csv_path.read_bytes().decode('utf-8-sig')
-  reader = csv.DictReader(io.StringIO(text))
-
-  for row in reader:
+  for row in read_edinet_code_csv(csv_path):
     edinet_code = (row.get('EDINET code')
-                   or row.get('EDINETコード', '')).strip()
+                   or row.get('ＥＤＩＮＥＴコード', '')).strip()
     sec_code = (row.get('Securities code')
                 or row.get('証券コード', '')).strip()
     if edinet_code and sec_code:

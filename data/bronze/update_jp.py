@@ -3,8 +3,18 @@ import argparse
 import os
 from pathlib import Path
 
+from data.bronze.cache import BronzeCache
+from data.bronze.providers.edinet import DOC_TYPE_ANNUAL
+from data.bronze.providers.edinet import DOC_TYPE_QUARTERLY
+from data.bronze.providers.edinet import DOC_TYPE_SEMIANNUAL
 from data.bronze.providers.edinet import EDINETProvider
 from data.bronze.providers.stooq import StooqProvider
+
+_DOC_TYPE_CHOICES = {
+    'annual': DOC_TYPE_ANNUAL,
+    'quarterly': DOC_TYPE_QUARTERLY,
+    'semiannual': DOC_TYPE_SEMIANNUAL,
+}
 
 
 def run():
@@ -26,8 +36,23 @@ def run():
   parser.add_argument(
       '--skip-prices', action='store_true',
       help='Skip Stooq price fetch')
+  parser.add_argument(
+      '--doc-types', nargs='+',
+      choices=list(_DOC_TYPE_CHOICES.keys()),
+      default=list(_DOC_TYPE_CHOICES.keys()),
+      help='Filing types to download (default: all)')
+  parser.add_argument(
+      '--cache-dir', type=Path, default=None,
+      help='Shared cache directory (default: ~/.cache/valuation/bronze/)')
+  parser.add_argument(
+      '--no-cache', action='store_true',
+      help='Disable shared cache')
 
   args = parser.parse_args()
+
+  cache = None if args.no_cache else BronzeCache(cache_dir=args.cache_dir)
+  if cache is not None:
+    print(f'[cache] {cache.cache_dir}')
 
   api_key = os.environ.get('EDINET_API_KEY', '')
   if not api_key:
@@ -35,15 +60,18 @@ def run():
         'EDINET_API_KEY is required. '
         'Get one at https://disclosure.edinet-fsa.go.jp/')
 
+  doc_types = {_DOC_TYPE_CHOICES[t] for t in args.doc_types}
   edinet = EDINETProvider(
       api_key=api_key,
-      history_years=args.history_years)
+      history_years=args.history_years,
+      doc_types=doc_types)
   print(f'Fetching EDINET filings for: {args.tickers}...')
   result = edinet.fetch(
       tickers=args.tickers,
       out_dir=args.out,
       refresh_days=0 if args.force else 7,
-      force=args.force)
+      force=args.force,
+      cache=cache)
 
   print(f'EDINET: fetched={result.fetched}, '
         f'skipped={result.skipped}')
@@ -59,7 +87,8 @@ def run():
         tickers=jp_symbols,
         out_dir=args.out,
         refresh_days=0 if args.force else 1,
-        force=args.force)
+        force=args.force,
+        cache=cache)
     print(f'Stooq JP: fetched={price_result.fetched}, '
           f'skipped={price_result.skipped}')
     if price_result.errors:

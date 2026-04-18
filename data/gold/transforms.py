@@ -153,29 +153,44 @@ def join_prices_pit(
   prices = prices.rename(columns={'symbol': 'ticker'})
   prices['ticker'] = prices['ticker'].str.replace(r'\.\w+$', '', regex=True)
 
-  panel_parts = []
+  target_tickers = set(metrics_wide[ticker_col].unique())
+  prices = prices[prices['ticker'].isin(target_tickers)]
 
-  for ticker, ticker_metrics in metrics_wide.groupby(ticker_col):
-    ticker_prices = prices[prices['ticker'] == ticker].copy()
-    if ticker_prices.empty:
-      continue
+  has_filed = metrics_wide['filed'].notna()
+  to_merge = metrics_wide[has_filed].copy()
 
-    ticker_prices = ticker_prices.sort_values('date')
-    merged = pd.merge_asof(
-        ticker_metrics.sort_values('filed'),
-        ticker_prices[['date', 'close']],
-        left_on='filed',
-        right_on='date',
-        direction='forward',
-    )
-    merged = merged.rename(columns={'close': 'price'})
-    panel_parts.append(merged)
+  if not to_merge.empty:
+    min_filed = to_merge['filed'].min() - pd.Timedelta(days=7)
+    prices = prices[prices['date'] >= min_filed]
 
-  if not panel_parts:
+  prices = prices.sort_values('date').reset_index(drop=True)
+  to_merge = to_merge.sort_values('filed').reset_index(drop=True)
+  no_filed = metrics_wide[~has_filed]
+
+  merged = pd.merge_asof(
+      to_merge,
+      prices[['ticker', 'date', 'close']],
+      by=ticker_col,
+      left_on='filed',
+      right_on='date',
+      direction='forward',
+  )
+  merged = merged.rename(columns={'close': 'price'})
+  tickers_with_prices = set(prices['ticker'].unique())
+  merged = merged[
+      merged[ticker_col].isin(tickers_with_prices)]
+
+  if not no_filed.empty:
+    no_filed = no_filed.copy()
+    no_filed['date'] = pd.NaT
+    no_filed['price'] = pd.NA
+    merged = pd.concat([merged, no_filed], ignore_index=True)
+
+  if merged.empty:
     cols = list(metrics_wide.columns) + ['date', 'price']
     return pd.DataFrame(columns=cols)
 
-  return pd.concat(panel_parts, ignore_index=True)
+  return merged
 
 
 def calculate_market_cap(

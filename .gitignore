@@ -3,6 +3,7 @@ venv
 **/*.json
 **/*.parquet
 **/*.csv
+**/*.zip
 **/*.png
 **/*.txt
 !example/**/*.txt
