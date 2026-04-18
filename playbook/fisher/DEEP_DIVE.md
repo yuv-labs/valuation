@@ -25,14 +25,15 @@ B. 경영진·조직 검증    ┘                                   (2~4주)   
 Shallow 리포트·정량 기초가 준비된 상태에서, Stream별로 대화하며 분석 진행. 호출 예시:
 
 ```text
-전체:    "PHILOSOPHY.md, DEEP_DIVE.md, research/fisher/shallow-dive/{ticker}_{name}.md를 읽고
+전체:    "PHILOSOPHY.md, DEEP_DIVE.md, research/shallow-dive/{ticker}_{name}.md를 읽고
          {TICKER}에 대해 Deep Dive를 시작하자."
+         (2026-04-18 이전 legacy Shallow는 research/fisher/shallow-dive/{ticker}_{name}.md)
 단일 Stream: "DEEP_DIVE.md의 Stream B를 {TICKER}에 대해 실행해줘."
 ```
 
 ## 사전 조건
 
-- 해당 종목의 Shallow Dive 리포트 완료 (Fisher 트랙, Deep 진입 판정)
+- 해당 종목의 Shallow Dive 리포트 완료 — **통합 `playbook/SHALLOW_DIVE.md` Phase 10 Track Gate에서 "피셔형" 배정** (또는 legacy fisher shallow + Deep 진입 판정)
 - 1층위 자료 접근 확보: DART/EDGAR 공시, IR 사이트, 주주서한 5~10년치, 컨콜 전사 8~12분기, 경영진 인터뷰·저서
 - `knowledge/` 디렉토리의 투자 프레임워크 숙지
 - 프레임은 **피셔형 확정** 상태. 세션 중 "섞지 않기" 원칙 유지
@@ -179,6 +180,8 @@ research/fisher/deep-dive/{TICKER}_monitoring.md     ← 모니터링 (Stream F,
 **산출**: 10년 후 주당 가치, CAGR, 매수 금지/회색/매수 가능 판정, Reverse 역산(선택)
 **선행**: B 권장(경영진 가이던스 해석), A 권장(산업 10년 전망). 둘 다 없어도 수치만으로 독립 실행 가능하나 정확도↓
 **작업 시간**: 반나절 ~ 1일
+
+**Shallow-Deep 역할 구분**: Shallow Phase 10-B는 간이 ROE×PBR 3변수 복리 CAGR로 매수 금지 trigger 감지용. Deep Stream C는 **EPS×PER 4시나리오** (스트레스/낙관/기본/비관) + 터미널 PER 피어 비교 9요인 + 누적 배당 + Reverse 역산 (현재가 정당화 필요 매출 CAGR).
 
 ### C-근간 철학
 
