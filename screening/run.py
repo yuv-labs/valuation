@@ -107,6 +107,37 @@ def _filter_market_cap(
   return df[mask].copy()
 
 
+def sort_by_track_score(df: pd.DataFrame) -> pd.DataFrame:
+  """Sort by track-appropriate quant score.
+
+  Fisher tickers by fisher_quant_score, Buffett by
+  buffett_quant_score, mixed by max of both.
+  """
+  df = df.copy()
+  f_score = df.get(
+      'fisher_quant_score',
+      pd.Series(0, index=df.index)).fillna(0)
+  b_score = df.get(
+      'buffett_quant_score',
+      pd.Series(0, index=df.index)).fillna(0)
+  track = df.get(
+      'track_signal', pd.Series('', index=df.index)).fillna('')
+
+  df['_sort'] = pd.Series(0.0, index=df.index)
+  df.loc[track == 'fisher', '_sort'] = f_score
+  df.loc[track == 'buffett', '_sort'] = b_score
+  mixed_mask = ~track.isin(['fisher', 'buffett'])
+  df.loc[mixed_mask, '_sort'] = pd.concat(
+      [f_score[mixed_mask], b_score[mixed_mask]],
+      axis=1).max(axis=1)
+
+  sort_cols = ['market', '_sort'] if 'market' in df.columns else [
+      '_sort']
+  df = df.sort_values(sort_cols, ascending=[True, False]
+                      if 'market' in df.columns else [False])
+  return df.drop(columns=['_sort'])
+
+
 def run_screening(
     gold_dir: Path,
     silver_dir: Path | None = None,
@@ -156,27 +187,7 @@ def run_screening(
   df['name'] = df['ticker'].apply(
       lambda t: _resolve_kr_name(t, name_map))
 
-  # Sort by track-appropriate quant score.
-  f_score = df.get(
-      'fisher_quant_score',
-      pd.Series(0, index=df.index)).fillna(0)
-  b_score = df.get(
-      'buffett_quant_score',
-      pd.Series(0, index=df.index)).fillna(0)
-  track = df.get(
-      'track_signal', pd.Series('', index=df.index)).fillna('')
-
-  df['_sort'] = pd.Series(0.0, index=df.index)
-  df.loc[track == 'fisher', '_sort'] = f_score
-  df.loc[track == 'buffett', '_sort'] = b_score
-  mixed_mask = ~track.isin(['fisher', 'buffett'])
-  df.loc[mixed_mask, '_sort'] = pd.concat(
-      [f_score[mixed_mask], b_score[mixed_mask]],
-      axis=1).max(axis=1)
-  df = df.sort_values(
-      ['market', '_sort'],
-      ascending=[True, False])
-  df = df.drop(columns=['_sort'])
+  df = sort_by_track_score(df)
 
   # Output.
   top = df.head(top_n)
