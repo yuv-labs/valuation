@@ -297,7 +297,8 @@ METRIC_SPECS_JP: dict[str, dict] = {
     'DIVIDENDS_PAID': {
         'taxonomies': {
             'jpcrp_cor': [
-                'DividendPaidPerShareSummaryOfBusinessResults',
+                'CashDividendsPaidSummaryOfBusinessResults',
+                'DividendsPaidSummaryOfBusinessResults',
             ],
             'jpigp_cor': [
                 'DividendsPaidIFRS',
