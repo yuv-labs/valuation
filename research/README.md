@@ -37,6 +37,7 @@
 | [RMD](shallow-dive/RMD_resmed.md) | ResMed | **Buffett (3:1 中)** | Shallow (통합) | 🔍 Deep 진입 예정 | CPAP razor-blade, P/E 22x vs 5yr 평균 40x — quality on sale | 2026-04-18 |
 | [DECK](shallow-dive/DECK_deckers-outdoor.md) | Deckers Outdoor | **Fisher (3.5:0.5 中上)** | Shallow (통합) | 🔍 Deep 진입 예정 | Hoka + UGG, P/E 14x 디레이팅, ONON 선례 재활용 | 2026-04-18 |
 | [PCTY](shallow-dive/PCTY_Paylocity.md) | Paylocity | **Fisher (4/4 中)** | Shallow (통합) | ⏸️ Keep (감속 관찰) | HCM SaaS, 매출 CAGR 25.9%→9% 급감속 — 1~2분기 관찰 | 2026-04-18 |
+| [PYPL](shallow-dive/PYPL_paypal.md) | PayPal | **Buffett (3:1 中)** | Deep S1-2 완료 | ⏸️ 파킹 | 해자 건재하나 경영진 트랙레코드 부족(Chriss 2.5yr) — 3-4년 후 재검토 | 2026-04-19 |
 
 ## 상태 범례
 
