@@ -217,3 +217,53 @@ def calculate_market_cap(
 
   panel['market_cap'] = panel[shares_col] * panel[price_col]
   return panel
+
+
+def join_prices_latest(
+    panel: pd.DataFrame,
+    prices: pd.DataFrame,
+    ticker_col: str = 'ticker',
+    shares_col: str = 'shares_q',
+) -> pd.DataFrame:
+  """Join each ticker's most recent price from the prices DataFrame.
+
+  Unlike join_prices_pit (which attaches the price at filing time),
+  this attaches the latest available price regardless of filing date.
+  Used for current-day valuation in Shallow/Deep Dive analyses.
+
+  Args:
+    panel: Panel already containing PIT price columns
+    prices: Daily prices with symbol and date columns
+    ticker_col: Name of ticker column in panel
+    shares_col: Name of shares column for market cap calculation
+
+  Returns:
+    Panel with price_latest, date_latest, market_cap_latest added
+  """
+  panel = panel.copy()
+
+  prices = prices.copy()
+  prices['date'] = pd.to_datetime(prices['date'])
+  prices = prices.rename(columns={'symbol': 'ticker'})
+  prices['ticker'] = prices['ticker'].str.replace(
+      r'\.\w+$', '', regex=True)
+
+  target_tickers = set(panel[ticker_col].unique())
+  prices = prices[prices['ticker'].isin(target_tickers)]
+
+  latest = (
+      prices.sort_values('date')
+      .groupby('ticker', as_index=False)
+      .tail(1)[['ticker', 'date', 'close']]
+      .rename(columns={'close': 'price_latest',
+                        'date': 'date_latest'})
+  )
+
+  panel = panel.merge(latest, on=ticker_col, how='left')
+  if shares_col in panel.columns:
+    panel['market_cap_latest'] = (
+        panel[shares_col] * panel['price_latest'])
+  else:
+    panel['market_cap_latest'] = None
+
+  return panel
